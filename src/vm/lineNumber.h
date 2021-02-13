@@ -6,8 +6,10 @@ typedef struct {
 	size_t* lines;
 } LineNumberTable;
 
+typedef struct VM VM;
+
 void initLineNumberTable(LineNumberTable* table);
 
-void writeLineNumberTable(LineNumberTable* table, size_t index, size_t line);
+void writeLineNumberTable(VM* vm, LineNumberTable* table, size_t index, size_t line);
 
-void freeLineNumberTable(LineNumberTable* table);
+void freeLineNumberTable(VM* vm, LineNumberTable* table);

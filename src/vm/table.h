@@ -13,13 +13,15 @@ typedef struct {
 	Entry* entries;
 } Table;
 
+typedef struct VM VM;
+
 void initTable(Table* table);
 
-void freeTable(Table* table);
+void freeTable(VM* vm, Table* table);
 
-bool tableSet(Table* table, ObjString* key, Value value);
+bool tableSet(VM* vm, Table* table, ObjString* key, Value value);
 
-void tableAddAll(Table* from, Table* to);
+void tableAddAll(VM* vm, Table* from, Table* to);
 
 bool tableGet(Table* table, ObjString* key, Value* value);
 

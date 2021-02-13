@@ -27,7 +27,6 @@ void initVM(VM* vm) {
 	vm->bytesAllocated = 0;
 	vm->nextGC = 1024 * 1024;
 
-	setCurrentVMMemory(vm); //TODO temp
 	initTable(&vm->globals);
 	initTable(&vm->strings);
 	initTable(&vm->listMethods);
@@ -36,7 +35,7 @@ void initVM(VM* vm) {
 	ObjClass* objectClass = newClass(vm, copyString(vm, "<object>", 8));
 	vm->objectClass = objectClass;
 
-	tableSet(&vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
+	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 
 	defineGlobalVariables(vm);
 	defineListMethods(vm);
@@ -90,7 +89,7 @@ void runtimeError(VM* vm, const char* format, ...) {
 
 static inline void concat(VM* vm, ObjString* a, ObjString* b) {
 	size_t length = a->length + b->length;
-	char* chars = ALLOCATE(char, length + 1);
+	char* chars = ALLOCATE(vm, char, length + 1);
 	memcpy(chars, a->chars, a->length); // Copy a
 	memcpy(chars + a->length, b->chars, b->length); // Copy b
 	chars[length] = '\0'; // Terminate
@@ -267,7 +266,7 @@ static void closeUpvalues(VM* vm, Value* last) {
 static void defineMethod(VM* vm, ObjString* name) {
 	Value method = peek(vm, 0);
 	ObjClass* klass = AS_CLASS(peek(vm, 1));
-	tableSet(&klass->methods, name, method);
+	tableSet(vm, &klass->methods, name, method);
 	pop(vm);
 }
 
@@ -421,7 +420,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_RUNTIME_ERR;
 				}
 
-				long long integer = (long long)pop(vm).number;
+				int64_t integer = (int64_t)pop(vm).number;
 
 				push(vm, NUMBER_VAL(~integer));
 
@@ -473,9 +472,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					ValueArray array;
 					initValueArray(&array);
 					for (size_t i = 0; i < list->items.count; i++) {
-						writeValueArray(&array, list->items.values[i]);
+						writeValueArray(vm, &array, list->items.values[i]);
 					}
-					writeValueArray(&array, toAppend);
+					writeValueArray(vm, &array, toAppend);
 
 					ObjList* nList = newList(vm, array);
 
@@ -512,14 +511,14 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_DEFINE_GLOBAL: {
 				ObjString* name = READ_STRING();
-				tableSet(&vm->globals, name, peek(vm, 0));
+				tableSet(vm, &vm->globals, name, peek(vm, 0));
 				pop(vm);
 				break;
 			}
 
 			case OP_SET_GLOBAL: {
 				ObjString* name = READ_STRING();
-				if (tableSet(&vm->globals, name, peek(vm, 0))) {
+				if (tableSet(vm, &vm->globals, name, peek(vm, 0))) {
 					tableDelete(&vm->globals, name);
 					runtimeError(vm, "Undefined variable '%s'.", name->chars);
 					return STATUS_RUNTIME_ERR;
@@ -640,7 +639,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				ObjClass* subclass = AS_CLASS(peek(vm, 0));
-				tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+				tableAddAll(vm, &AS_CLASS(superclass)->methods, &subclass->methods);
 				pop(vm); // Subclass.
 				break;
 			}
@@ -702,7 +701,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
-				tableSet(&instance->fields, READ_STRING(), peek(vm, 0));
+				tableSet(vm, &instance->fields, READ_STRING(), peek(vm, 0));
 
 				Value value = pop(vm);
 				pop(vm);
@@ -717,7 +716,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
-				tableSet(&instance->fields, READ_STRING(), peek(vm, 0));
+				tableSet(vm, &instance->fields, READ_STRING(), peek(vm, 0));
 
 				pop(vm);
 				/*Value pop(vm);
@@ -731,7 +730,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ValueArray items;
 				initValueArray(&items);
 				for (size_t i = 0; i < itemCount; i++) {
-					writeValueArray(&items, peek(vm, itemCount - i - 1));
+					writeValueArray(vm, &items, peek(vm, itemCount - i - 1));
 				}
 				for (size_t i = 0; i < itemCount; i++) {
 					pop(vm);
@@ -832,7 +831,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					ObjString* name = AS_STRING(peek(vm, 1));
 
 					Value value = peek(vm, 0);
-					tableSet(&instance->fields, name, value);
+					tableSet(vm, &instance->fields, name, value);
 					value = pop(vm);
 					pop(vm);
 					pop(vm);
@@ -932,8 +931,8 @@ InterpreterResult interpretVM(VM* vm, const char* source) {
 
 
 void freeVM(VM* vm) {
-	freeTable(&vm->strings);
-	freeTable(&vm->globals);
+	freeTable(vm, &vm->strings);
+	freeTable(vm, &vm->globals);
 	freeObjects(vm);
 	free(vm->grayStack);
 }

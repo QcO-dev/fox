@@ -3,6 +3,7 @@
 
 typedef struct Obj Obj;
 typedef struct ObjString ObjString;
+typedef struct VM VM;
 
 typedef enum {
 	VAL_BOOL,
@@ -27,8 +28,8 @@ typedef struct {
 } ValueArray;
 
 void initValueArray(ValueArray* array);
-void writeValueArray(ValueArray* array, Value value);
-void freeValueArray(ValueArray* array);
+void writeValueArray(VM* vm, ValueArray* array, Value value);
+void freeValueArray(VM* vm, ValueArray* array);
 char* valueToString(Value value);
 bool isFalsey(Value value);
 bool valuesEqual(Value a, Value b);

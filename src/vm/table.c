@@ -2,6 +2,7 @@
 
 #include <core/memory.h>
 #include <vm/object.h>
+#include <vm/vm.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -13,8 +14,8 @@ void initTable(Table* table) {
 	table->entries = NULL;
 }
 
-void freeTable(Table* table) {
-	FREE_ARRAY(Entry, table->entries, table->capacity + 1);
+void freeTable(VM* vm, Table* table) {
+	FREE_ARRAY(vm, Entry, table->entries, table->capacity + 1);
 	initTable(table);
 }
 
@@ -44,8 +45,8 @@ static Entry* findEntry(Entry* entries, int capacity, ObjString* key) {
 	}
 }
 
-static void adjustCapacity(Table* table, int capacity) {
-	Entry* entries = ALLOCATE(Entry, capacity + 1);
+static void adjustCapacity(VM* vm, Table* table, int capacity) {
+	Entry* entries = ALLOCATE(vm, Entry, capacity + 1);
 	for (int i = 0; i <= capacity; i++) {
 		entries[i].key = NULL;
 		entries[i].value = NULL_VAL;
@@ -62,16 +63,16 @@ static void adjustCapacity(Table* table, int capacity) {
 		table->count++;
 	}
 
-	FREE_ARRAY(Entry, table->entries, table->capacity + 1);
+	FREE_ARRAY(vm, Entry, table->entries, table->capacity + 1);
 
 	table->entries = entries;
 	table->capacity = capacity;
 }
 
-bool tableSet(Table* table, ObjString* key, Value value) {
+bool tableSet(VM* vm, Table* table, ObjString* key, Value value) {
 	if (table->count + 1 > (table->capacity + 1) * TABLE_MAX_LOAD) {
 		int capacity = (table->capacity + 1 < 8 ? 8 : (table->capacity + 1) * 2) - 1;
-		adjustCapacity(table, capacity);
+		adjustCapacity(vm, table, capacity);
 	}
 
 	Entry* entry = findEntry(table->entries, table->capacity, key);
@@ -143,11 +144,11 @@ void tableRemoveWhite(Table* table) {
 
 }
 
-void tableAddAll(Table* from, Table* to) {
+void tableAddAll(VM* vm, Table* from, Table* to) {
 	for (int i = 0; i <= from->capacity; i++) {
 		Entry* entry = &from->entries[i];
 		if (entry->key != NULL) {
-			tableSet(to, entry->key, entry->value);
+			tableSet(vm, to, entry->key, entry->value);
 		}
 	}
 }

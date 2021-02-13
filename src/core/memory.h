@@ -3,9 +3,7 @@
 #include <vm/vm.h>
 #include <compiler/compiler.h>
 
-void* reallocate(void* pointer, size_t oldSize, size_t size);
-
-void setCurrentVMMemory(VM* vm); //TODO temp
+void* reallocate(VM* vm, void* pointer, size_t oldSize, size_t size);
 
 void collectGarbage(VM* vm);
 
@@ -15,10 +13,10 @@ void markValue(VM* vm, Value value);
 void markObject(VM* vm, Obj* object);
 void markTable(VM* vm, Table* table);
 
-#define ALLOCATE(type, count) \
-    (type*)reallocate(NULL, 0, sizeof(type) * (count))
+#define ALLOCATE(vm, type, count) \
+    (type*)reallocate(vm, NULL, 0, sizeof(type) * (count))
 
-#define GROW_ARRAY(type, pointer, oldSize, newSize) reallocate(pointer, sizeof(type) * (oldSize), sizeof(type) * (newSize))
+#define GROW_ARRAY(vm, type, pointer, oldSize, newSize) reallocate(vm, pointer, sizeof(type) * (oldSize), sizeof(type) * (newSize))
 
-#define FREE(type, pointer) reallocate(pointer, sizeof(type), 0)
-#define FREE_ARRAY(type, pointer, length) reallocate(pointer, sizeof(type) * (length), 0)
+#define FREE(vm, type, pointer) reallocate(vm, pointer, sizeof(type), 0)
+#define FREE_ARRAY(vm, type, pointer, length) reallocate(vm, pointer, sizeof(type) * (length), 0)
