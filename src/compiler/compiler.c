@@ -139,7 +139,7 @@ static void initCompiler(Compiler* compiler, Compiler* oldCompiler, VM* vm, Pars
 }
 
 static void emitByte(Parser* parser, Compiler* compiler, uint8_t byte) {
-	writeChunk(currentChunk(compiler), byte, parser->previous.line);
+	writeChunk(compiler->vm, currentChunk(compiler), byte, parser->previous.line);
 }
 
 static int emitJump(Parser* parser, Compiler* compiler, uint8_t instruction) {

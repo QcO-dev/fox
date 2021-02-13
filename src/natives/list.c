@@ -8,7 +8,7 @@ Value listLengthNative(VM* vm, size_t argCount, Value* args, bool* hasError) {
 }
 
 Value listAppendNative(VM* vm, size_t argCount, Value* args, bool* hasError) {
-	writeValueArray(&AS_LIST(args[0])->items, args[1]);
+	writeValueArray(vm, &AS_LIST(args[0])->items, args[1]);
 	return NULL_VAL;
 }
 

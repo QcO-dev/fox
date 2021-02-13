@@ -14,18 +14,18 @@ void initValueArray(ValueArray* array) {
 	array->count = 0;
 }
 
-void writeValueArray( ValueArray* array, Value value) {
+void writeValueArray(VM* vm, ValueArray* array, Value value) {
 	if (array->capacity < array->count + 1) {
 		size_t oldCap = array->capacity;
 		array->capacity = array->capacity < 8 ? 8 : array->capacity * 2;
-		array->values = GROW_ARRAY(Value, array->values, oldCap, array->capacity);
+		array->values = GROW_ARRAY(vm, Value, array->values, oldCap, array->capacity);
 	}
 
 	array->values[array->count++] = value;
 }
 
-void freeValueArray(ValueArray* array) {
-	FREE_ARRAY(Value, array->values, array->capacity);
+void freeValueArray(VM* vm, ValueArray* array) {
+	FREE_ARRAY(vm, Value, array->values, array->capacity);
 	initValueArray(array);
 }
 

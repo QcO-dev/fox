@@ -8,7 +8,7 @@
 void defineNative(VM* vm, Table* table, const char* name, NativeFn function, size_t arity) {
 	push(vm, OBJ_VAL(copyString(vm, name, (int)strlen(name))));
 	push(vm, OBJ_VAL(newNative(vm, function, arity)));
-	tableSet(table, AS_STRING(vm->stack[0]), vm->stack[1]);
+	tableSet(vm, table, AS_STRING(vm->stack[0]), vm->stack[1]);
 	pop(vm);
 	pop(vm);
 }

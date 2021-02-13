@@ -13,7 +13,7 @@
     (type*)allocateObject(vm, sizeof(type), objectType)
 
 Obj* allocateObject(VM* vm, size_t size, ObjType type) {
-	Obj* object = (Obj*)reallocate(NULL, 0, size);
+	Obj* object = (Obj*)reallocate(vm, NULL, 0, size);
 	object->type = type;
 	object->isMarked = false;
 	object->next = vm->objects;
@@ -33,7 +33,7 @@ static ObjString* allocateString(VM* vm, char* chars, size_t length, uint32_t ha
 	string->hash = hash;
 
 	push(vm, OBJ_VAL(string));
-	tableSet(&vm->strings, string, NULL_VAL);
+	tableSet(vm, &vm->strings, string, NULL_VAL);
 	pop(vm);
 
 	return string;
@@ -57,7 +57,7 @@ ObjString* takeString(VM* vm, char* chars, int length) {
 	ObjString* interned = tableFindString(&vm->strings, chars, length,
 		hash);
 	if (interned != NULL) {
-		FREE_ARRAY(char, chars, length + 1);
+		FREE_ARRAY(vm, char, chars, length + 1);
 		return interned;
 	}
 
@@ -71,7 +71,7 @@ ObjString* copyString(VM* vm, const char* chars, size_t length) {
 	ObjString* interned = tableFindString(&vm->strings, chars, length, hash);
 	if (interned != NULL) return interned;
 
-	char* heapChars = ALLOCATE(char, length + 1);
+	char* heapChars = ALLOCATE(vm, char, length + 1);
 	memcpy(heapChars, chars, length);
 	heapChars[length] = '\0';
 
@@ -96,7 +96,7 @@ ObjNative* newNative(VM* vm, NativeFn function, size_t arity) {
 }
 
 ObjClosure* newClosure(VM* vm, ObjFunction* function) {
-	ObjUpvalue** upvalues = ALLOCATE(ObjUpvalue*, function->upvalueCount);
+	ObjUpvalue** upvalues = ALLOCATE(vm, ObjUpvalue*, function->upvalueCount);
 	for (size_t i = 0; i < function->upvalueCount; i++) {
 		upvalues[i] = NULL;
 	}

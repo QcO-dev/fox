@@ -12,28 +12,22 @@
 
 #define GC_HEAP_GROW_FACTOR 2
 
-VM* currentVM; // TODO temp code
-
-void setCurrentVMMemory(VM* vm) {
-	currentVM = vm;
-}
-
 void collectGarbage(VM* vm);
-static void freeObject(Obj* object);
+static void freeObject(VM* vm, Obj* object);
 
-void* reallocate(void* pointer, size_t oldSize, size_t size) {
+void* reallocate(VM* vm, void* pointer, size_t oldSize, size_t size) {
 
-	currentVM->bytesAllocated += size - oldSize;
+	vm->bytesAllocated += size - oldSize;
 
 #ifdef FOX_DEBUG_STRESS_GC
 	if (size > oldSize) {
-		collectGarbage(currentVM);
+		collectGarbage(vm);
 	}
 #endif
 
 #ifndef FOX_DEBUG_DISABLE_GC
-	if (currentVM->bytesAllocated > currentVM->nextGC) {
-		collectGarbage(currentVM);
+	if (vm->bytesAllocated > vm->nextGC) {
+		collectGarbage(vm);
 	}
 #endif
 	if (size == 0) {
@@ -199,7 +193,7 @@ static void sweep(VM* vm) {
 				vm->objects = object;
 			}
 
-			freeObject(unreached);
+			freeObject(vm, unreached);
 		}
 	}
 }
@@ -227,7 +221,7 @@ void collectGarbage(VM* vm) {
 
 }
 
-static void freeObject(Obj* object) {
+static void freeObject(VM* vm, Obj* object) {
 
 #ifdef FOX_DEBUG_LOG_GC
 	printf("%p free type %d\n", (void*)object, object->type);
@@ -237,55 +231,55 @@ static void freeObject(Obj* object) {
 
 		case OBJ_CLASS: {
 			ObjClass* klass = (ObjClass*)object;
-			freeTable(&klass->methods);
-			FREE(ObjClass, object);
+			freeTable(vm, &klass->methods);
+			FREE(vm, ObjClass, object);
 			break;
 		}
 
 		case OBJ_LIST: {
-			FREE(ObjList, object);
+			FREE(vm, ObjList, object);
 			break;
 		}
 
 		case OBJ_INSTANCE: {
 			ObjInstance* instance = (ObjInstance*)object;
-			freeTable(&instance->fields);
-			FREE(ObjInstance, object);
+			freeTable(vm, &instance->fields);
+			FREE(vm, ObjInstance, object);
 			break;
 		}
 
 		case OBJ_BOUND_METHOD:
-			FREE(ObjBoundMethod, object);
+			FREE(vm, ObjBoundMethod, object);
 			break;
 
 		case OBJ_STRING: {
 			ObjString* string = (ObjString*)object;
-			FREE_ARRAY(char, string->chars, string->length + 1);
-			FREE(ObjString, object);
+			FREE_ARRAY(vm, char, string->chars, string->length + 1);
+			FREE(vm, ObjString, object);
 			break;
 		}
 
 		case OBJ_FUNCTION: {
 			ObjFunction* function = (ObjFunction*)object;
-			freeChunk(&function->chunk);
-			FREE(ObjFunction, object);
+			freeChunk(vm, &function->chunk);
+			FREE(vm, ObjFunction, object);
 			break;
 		}
 
 		case OBJ_NATIVE: {
-			FREE(ObjNative, object);
+			FREE(vm, ObjNative, object);
 			break;
 		}
 
 		case OBJ_CLOSURE: {
 			ObjClosure* closure = (ObjClosure*)object;
-			FREE_ARRAY(ObjUpvalue*, closure->upvalues, closure->upvalueCount);
-			FREE(ObjClosure, object);
+			FREE_ARRAY(vm, ObjUpvalue*, closure->upvalues, closure->upvalueCount);
+			FREE(vm, ObjClosure, object);
 			break;
 		}
 
 		case OBJ_UPVALUE: {
-			FREE(ObjUpvalue, object);
+			FREE(vm, ObjUpvalue, object);
 			break;
 		}
 
@@ -296,7 +290,7 @@ void freeObjects(VM* vm) {
 	Obj* object = vm->objects;
 	while (object != NULL) {
 		Obj* next = object->next;
-		freeObject(object);
+		freeObject(vm, object);
 		object = next;
 	}
 }
