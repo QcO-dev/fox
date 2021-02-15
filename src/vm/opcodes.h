@@ -51,5 +51,7 @@ typedef enum {
 	OP_LIST,
 	OP_GET_INDEX,
 	OP_SET_INDEX,
+	OP_EXPORT,
+	OP_IMPORT,
 	OP_RETURN
 } Opcode;

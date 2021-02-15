@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <core/file.h>
 
 // The below variable and function allows the user to exit with Ctrl-C
 static volatile sig_atomic_t replKeepRunning = 1;
@@ -24,6 +25,9 @@ static void repl() {
 	VM vm;
 	initVM(&vm);
 
+	char* scriptName = malloc(9);
+	strcpy(scriptName, "<script>");
+
 	while (replKeepRunning) {
 		printf(">>> ");
 
@@ -32,7 +36,9 @@ static void repl() {
 			break;
 		}
 
-		interpretVM(&vm, line);
+
+
+		interpretVM(&vm, ".", line, scriptName);
 
 		/*Value lineVal = *vm.stackTop;
 
@@ -45,41 +51,52 @@ static void repl() {
 	freeVM(&vm);
 }
 
-static char* readFile(const char* path) {
-	FILE* file = fopen(path, "rb");
+static char* fromLastInstance(const char* haystack, const char* needle) {
+	if (*needle == '\0')
+		return (char*)haystack;
 
-	if (file == NULL) {
-		fprintf(stderr, "Could not open file \"%s\".\n", path);
-		exit(-4);
+	char* result = NULL;
+	for (;;) {
+		char* p = strstr(haystack, needle);
+		if (p == NULL)
+			break;
+		result = p;
+		haystack = p + 1;
 	}
 
-	fseek(file, 0L, SEEK_END);
-	size_t fileSize = ftell(file);
-	rewind(file);
-
-	char* buffer = (char*)malloc(fileSize + 1);
-	if (buffer == NULL) {
-		fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
-		exit(-4);
-	}
-
-
-	size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
-	buffer[bytesRead] = '\0';
-
-	if (bytesRead < fileSize) {
-		fprintf(stderr, "Could not read file \"%s\".\n", path);
-		exit(-4);
-	}
-
-	fclose(file);
-	return buffer;
+	return result;
 }
 
 static void runFile(const char* path) {
+	int length = strlen(path);
+	char* slashRoot = malloc(length + 1);
+	strcpy(slashRoot, path);
+
+	char currentChar; int i;
+	for (char currentChar = *slashRoot, i = 0; currentChar != '\0'; i++) {
+		currentChar = slashRoot[i];
+		if (currentChar == '\\') {
+			slashRoot[i] = '/';
+		}
+	}
+
+	int index = fromLastInstance(slashRoot, "/") - slashRoot;
+
+	char* base = malloc(index + 2);
+	memcpy(base, slashRoot, index);
+	base[index] = '/';
+	base[index + 1] = '\0';
+
 	char* source = readFile(path);
-	InterpreterResult result = interpret(source);
+	if (source == NULL) exit(-4);
+
+	char* name = malloc(strlen(fromLastInstance(slashRoot, "/")));
+	strcpy(name, fromLastInstance(slashRoot, "/") + 1);
+
+	InterpreterResult result = interpret(base, name, source);
 	free(source);
+	free(base);
+	free(slashRoot);
 
 	if (result == STATUS_COMPILE_ERR) exit(-2);
 	if (result == STATUS_RUNTIME_ERR) exit(-3);

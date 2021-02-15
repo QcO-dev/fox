@@ -1,6 +1,7 @@
 #include "vm.h"
 #include <core/common.h>
 #include <core/memory.h>
+#include <core/file.h>
 #include <vm/opcodes.h>
 #include <compiler/compiler.h>
 #include <debug/debugFlags.h>
@@ -14,6 +15,9 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include <io.h>
+
+static InterpreterResult import(VM* vm, char* path, ObjString* name);
 
 void initVM(VM* vm) {
 	vm->stackTop = vm->stack;
@@ -26,14 +30,24 @@ void initVM(VM* vm) {
 	vm->compiler = NULL;
 	vm->bytesAllocated = 0;
 	vm->nextGC = 1024 * 1024;
+	vm->basePath = NULL;
+	vm->filename = NULL;
+	vm->imports = NULL;
+	vm->importCapacity = 0;
+	vm->importCount = 0;
+	vm->isImport = false;
 
 	initTable(&vm->globals);
+	initTable(&vm->exports);
 	initTable(&vm->strings);
 	initTable(&vm->listMethods);
 	initTable(&vm->stringMethods);
 
 	ObjClass* objectClass = newClass(vm, copyString(vm, "<object>", 8));
 	vm->objectClass = objectClass;
+
+	ObjClass* importClass = newClass(vm, copyString(vm, "<import>", 8));
+	vm->importClass = importClass;
 
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 
@@ -68,6 +82,8 @@ void runtimeError(VM* vm, const char* format, ...) {
 	vfprintf(stderr, format, args);
 	va_end(args);
 	fputs("\n", stderr);
+
+	fprintf(stderr, "In File '%s':\n", vm->filename);
 
 	for (int i = vm->frameCount - 1; i >= 0; i--) {
 		CallFrame* frame = &vm->frames[i];
@@ -674,7 +690,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			}
 
 			case OP_GET_PROPERTY: {
-				if (IS_INSTANCE(peek(vm, 0))) {
+				if (!IS_INSTANCE(peek(vm, 0))) {
 					runtimeError(vm, "Only instances can contain properties.");
 					return STATUS_RUNTIME_ERR;
 				}
@@ -870,6 +886,37 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_EXPORT: {
+				Value toExport = pop(vm);
+				ObjString* string = READ_STRING();
+
+				tableSet(vm, &vm->exports, string, toExport);
+				break;
+			}
+
+			case OP_IMPORT: {
+				ObjString* path = READ_STRING();
+
+				char* extension = ".fox";
+
+				char* string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
+
+				memcpy(string, vm->basePath->chars, vm->basePath->length);
+				memcpy(string + vm->basePath->length, path->chars, path->length);
+				memcpy(string + vm->basePath->length + path->length, extension, 4);
+				string[path->length + vm->basePath->length + 4] = '\0';
+
+				if (_access(string, 0) == 0) {
+					import(vm, string, path);
+				}
+				else {
+					runtimeError(vm, "Could not find import '%s'", path->chars);
+					return STATUS_RUNTIME_ERR;
+				}
+
+				break;
+			}
+
 			case OP_RETURN: {
 				Value result = pop(vm);
 
@@ -897,22 +944,27 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 #undef READ_SHORT
 }
 
-InterpreterResult interpret(const char* source) {
-
+InterpreterResult interpret(char* basePath, char* filename, const char* source) {
 	VM vm;
 	initVM(&vm);
 
-	InterpreterResult result = interpretVM(&vm, source);
+	InterpreterResult result = interpretVM(&vm, basePath, filename, source);
 
 	freeVM(&vm);
 
 	return result;
 }
 
-InterpreterResult interpretVM(VM* vm, const char* source) {
+InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char* source) {
 
 	Chunk chunk;
 	initChunk(&chunk);
+
+	ObjString* base = copyString(vm, basePath, strlen(basePath));
+
+	vm->basePath = base;
+
+	vm->filename = filename;
 
 	ObjFunction* function = compile(vm, source, &chunk);
 	if (function == NULL) return STATUS_COMPILE_ERR;
@@ -929,10 +981,74 @@ InterpreterResult interpretVM(VM* vm, const char* source) {
 	return execute(vm, &vm->frames[vm->frameCount - 1].closure->function->chunk);
 }
 
+InterpreterResult import(VM* importingVm, char* path, ObjString* name) {
+	VM* vm = malloc(sizeof(VM));
+	initVM(vm);
+
+	vm->isImport = true;
+
+	Chunk chunk;
+	initChunk(&chunk);
+
+	vm->basePath = importingVm->basePath;
+	vm->filename = malloc(name->length + 5);
+	strcpy(vm->filename, name->chars);
+	strcpy(vm->filename + name->length, ".fox");
+
+	char* source = readFile(path);
+	if (source == NULL) return STATUS_RUNTIME_ERR;
+
+	ObjFunction* function = compile(vm, source, &chunk);
+	if (function == NULL) return STATUS_COMPILE_ERR;
+
+	vm->compiler = NULL;
+
+	push(vm, OBJ_VAL(function));
+
+	ObjClosure* closure = newClosure(vm, function);
+	pop(vm);
+	push(vm, OBJ_VAL(closure));
+	callValue(vm, OBJ_VAL(closure), 0, false);
+
+	InterpreterResult result = execute(vm, &vm->frames[vm->frameCount - 1].closure->function->chunk);
+
+	ObjInstance* obj = newInstance(importingVm, importingVm->importClass);
+
+	for (int i = 0; i <= vm->exports.capacity; i++) {
+		Entry* entry = &vm->exports.entries[i];
+		if (entry->key != NULL) {
+			// Copying the string due to interning making them different
+			tableSet(importingVm, &obj->fields, copyString(importingVm, entry->key->chars, entry->key->length), entry->value);
+		}
+	}
+
+	tableSet(importingVm, &importingVm->globals, name, OBJ_VAL(obj));
+
+	// Cleans up memory which can no longer be accessed.
+	collectGarbage(vm);
+
+	if (importingVm->importCapacity < importingVm->importCount + 1) {
+		size_t oldCapacity = importingVm->importCapacity;
+		importingVm->importCapacity = importingVm->importCapacity < 8 ? 8 : importingVm->importCapacity * 2;
+		importingVm->imports = GROW_ARRAY(importingVm, VM*, importingVm->imports, oldCapacity, importingVm->importCapacity);
+	}
+
+	importingVm->imports[importingVm->importCount++] = vm;
+
+	return result;
+}
 
 void freeVM(VM* vm) {
+
+	// Frees the VMs of the imports, as they are not freed in the import function
+	for (size_t i = 0; i < vm->importCount; i++) {
+		freeVM(vm->imports[i]);
+	}
+
 	freeTable(vm, &vm->strings);
 	freeTable(vm, &vm->globals);
 	freeObjects(vm);
+	free(vm->filename);
 	free(vm->grayStack);
+	if (vm->isImport) free(vm);
 }

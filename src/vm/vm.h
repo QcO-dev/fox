@@ -30,24 +30,32 @@ struct VM {
 	Obj* objects;
 	Table strings;
 	Table globals;
+	Table exports;
 	Table stringMethods;
 	Table listMethods;
 	ObjClass* objectClass;
+	ObjClass* importClass;
 	ObjUpvalue* openUpvalues;
 	size_t grayCount;
 	size_t grayCapacity;
 	Obj** grayStack;
 	size_t bytesAllocated;
 	size_t nextGC;
+	ObjString* basePath;
+	char* filename;
+	size_t importCount;
+	size_t importCapacity;
+	struct VM** imports; // TODO
+	bool isImport;
 };
 
 void initVM(VM* vm);
 
 InterpreterResult execute(VM* vm, Chunk* chunk);
 
-InterpreterResult interpret(const char* source);
+InterpreterResult interpret(char* basePath, char* filename, const char* source);
 
-InterpreterResult interpretVM(VM* vm, const char* source);
+InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char* source);
 
 void freeVM(VM* vm);
 
