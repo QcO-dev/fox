@@ -1,0 +1,3 @@
+# Removes weird cpp and objective-c labeling
+*.c linguist-language=C
+*.h linguist-language=C
