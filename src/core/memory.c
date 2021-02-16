@@ -170,6 +170,7 @@ static void markRoots(VM* vm) {
 	}
 
 	markTable(vm, &vm->globals);
+	markTable(vm, &vm->exports);
 	if(vm->compiler != NULL)
 		markCompilerRoots(vm->compiler);
 }

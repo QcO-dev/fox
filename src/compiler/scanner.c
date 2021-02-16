@@ -127,15 +127,27 @@ static TokenType checkKeyword(Scanner* scanner, int start, int length, const cha
 static TokenType identifierType(Scanner* scanner) {
 	switch (*scanner->start) {
 		case 'c': return checkKeyword(scanner, 1, 4, "lass", TOKEN_CLASS);
-		case 'e': 
+		case 'a': return checkKeyword(scanner, 1, 1, "s", TOKEN_AS);
+		case 'e':
 			if (scanner->current - scanner->start > 1) {
 				switch (scanner->start[1]) {
 					case 'l': return checkKeyword(scanner, 2, 2, "se", TOKEN_ELSE);
-					case 'x': return checkKeyword(scanner, 2, 5, "tends", TOKEN_EXTENDS);
+					case 'x': {
+						switch (scanner->start[2]) {
+							case 't': return checkKeyword(scanner, 3, 4, "ends", TOKEN_EXTENDS);
+							case 'p': return checkKeyword(scanner, 3, 3, "ort", TOKEN_EXPORT);
+						}
+					}
 				}
 			}
-			
-		case 'i': return checkKeyword(scanner, 1, 1, "f", TOKEN_IF);
+
+		case 'i': if (scanner->current - scanner->start > 1) {
+			switch (scanner->start[1]) {
+				case 'f': return checkKeyword(scanner, 2, 0, "", TOKEN_IF);
+				case 'm': return checkKeyword(scanner, 2, 4, "port", TOKEN_IMPORT);
+			}
+			break;
+		}
 		case 'n': return checkKeyword(scanner, 1, 3, "ull", TOKEN_NULL);
 		case 'p': return checkKeyword(scanner, 1, 4, "rint", TOKEN_PRINT);
 		case 'r': return checkKeyword(scanner, 1, 5, "eturn", TOKEN_RETURN);
