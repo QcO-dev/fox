@@ -1150,9 +1150,36 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 static void importDeclaration(Parser* parser, Compiler* compiler) {
 
 	consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
-	uint8_t name = identifierConstant(parser, compiler, &parser->previous);
+
+	size_t length = 1;
+	char* path = malloc(parser->previous.length + 1);
+	memcpy(path, parser->previous.start, parser->previous.length);
+	length += parser->previous.length;
+	while (match(parser, TOKEN_DOT)) {
+		consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
+		size_t oldSize = length;
+		length += parser->previous.length;
+		path = realloc(path, oldSize + length + 1);
+		path[oldSize-1] = '/';
+		memcpy(path + oldSize, parser->previous.start, parser->previous.length);
+	}
+
+	path[length] = '\0';
+
+	uint8_t name;
+
+	uint8_t pathConstant = makeConstant(parser, compiler, OBJ_VAL(copyString(compiler->vm, path, length)));
+
+	if (match(parser, TOKEN_AS)) {
+		consume(parser, TOKEN_IDENTIFIER, "Expected import alias.");
+		name = identifierConstant(parser, compiler, &parser->previous);
+	}
+	else {
+		name = identifierConstant(parser, compiler, &parser->previous);
+	}
 
 	emitByte(parser, compiler, OP_IMPORT);
+	emitByte(parser, compiler, pathConstant);
 	emitByte(parser, compiler, name);
 
 	consume(parser, TOKEN_SEMICOLON, "Expected ';' after import.");

@@ -896,6 +896,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_IMPORT: {
 				ObjString* path = READ_STRING();
+				ObjString* name = READ_STRING();
 
 				char* extension = ".fox";
 
@@ -907,7 +908,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				string[path->length + vm->basePath->length + 4] = '\0';
 
 				if (_access(string, 0) == 0) {
-					import(vm, string, path);
+					import(vm, string, name);
 				}
 				else {
 					runtimeError(vm, "Could not find import '%s'", path->chars);

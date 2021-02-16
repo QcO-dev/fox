@@ -51,7 +51,7 @@ static int byteInstruction(const char* name, size_t offset, Chunk* chunk) {
 static int jumpInstruction(const char* name, int sign, size_t offset, Chunk* chunk) {
 	uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
 	jump |= chunk->code[offset + 2];
-	printf("%-16s %4d -> %d", name, offset, offset + 3 + sign * jump);
+	printf("%-16s %4d | %d", name, offset, offset + 3 + sign * jump);
 	return offset + 3;
 }
 
@@ -60,6 +60,18 @@ static int invokeInstruction(const char* name, size_t offset, Chunk* chunk) {
 	uint8_t argCount = chunk->code[offset + 2];
 	char* string = valueToString(chunk->constants.values[constant]);
 	printf("%-18s (%d args) %4d '%s'", name, argCount, constant, string);
+	free(string);
+	return offset + 3;
+}
+
+static int importInstruction(const char* name, size_t offset, Chunk* chunk) {
+	uint8_t constant = chunk->code[offset + 1];
+	char* string = valueToString(chunk->constants.values[constant]);
+
+	uint8_t nameConstant = chunk->code[offset + 2];
+	char* nameString = valueToString(chunk->constants.values[nameConstant]);
+
+	printf("%-16s %4d '%s' -> %4d '%s'", name, constant, string, nameConstant, nameString);
 	free(string);
 	return offset + 3;
 }
@@ -142,7 +154,7 @@ size_t disassembleInstruction(Chunk* chunk, size_t offset) {
 		case OP_SET_INDEX: return simpleInstruction("SET_INDEX", offset);
 		case OP_OBJECT: return simpleInstruction("OBJECT", offset);
 		case OP_EXPORT: return constantInstruction("EXPORT", offset, chunk);
-		case OP_IMPORT: return constantInstruction("IMPORT", offset, chunk);
+		case OP_IMPORT: return importInstruction("IMPORT", offset, chunk);
 		default:
 			printf("Unknown opcode: %02X", instruction);
 			return offset + 1;
