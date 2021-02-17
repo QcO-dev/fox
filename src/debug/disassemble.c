@@ -85,6 +85,7 @@ size_t disassembleInstruction(Chunk* chunk, size_t offset) {
 
 	switch (instruction) {
 		case OP_RETURN: return simpleInstruction("RETURN", offset);
+		case OP_DUP: return simpleInstruction("DUP", offset);
 		case OP_NEGATE: return simpleInstruction("NEGATE", offset);
 		case OP_NOT: return simpleInstruction("NOT", offset);
 		case OP_BITWISE_NOT: return simpleInstruction("BITWISE_NOT", offset);
@@ -143,7 +144,6 @@ size_t disassembleInstruction(Chunk* chunk, size_t offset) {
 		case OP_CLASS: return constantInstruction("CLASS", offset, chunk);
 		case OP_GET_PROPERTY: return constantInstruction("GET_PROPERTY", offset, chunk);
 		case OP_SET_PROPERTY: return constantInstruction("SET_PROPERTY", offset, chunk);
-		case OP_SET_PROPERTY_V: return constantInstruction("SET_PROPERTY_V", offset, chunk);
 		case OP_METHOD: return constantInstruction("METHOD", offset, chunk);
 		case OP_INVOKE: return invokeInstruction("INVOKE", offset, chunk);
 		case OP_INHERIT: return simpleInstruction("INHERIT", offset);

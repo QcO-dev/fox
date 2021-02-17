@@ -399,6 +399,7 @@ static void object(Parser* parser, Compiler* compiler, bool canAssign) {
 	
 	if (parser->current.type != TOKEN_RIGHT_BRACE) {
 		do {
+			emitByte(parser, compiler, OP_DUP);
 			consume(parser, TOKEN_IDENTIFIER, "Expected identifier key for object key-value pair.");
 			
 			uint8_t name = identifierConstant(parser, compiler, &parser->previous);
@@ -407,8 +408,9 @@ static void object(Parser* parser, Compiler* compiler, bool canAssign) {
 
 			expression(parser, compiler);
 
-			emitByte(parser, compiler, OP_SET_PROPERTY_V);
+			emitByte(parser, compiler, OP_SET_PROPERTY);
 			emitByte(parser, compiler, name);
+			emitByte(parser, compiler, OP_POP);
 		} while (match(parser, TOKEN_COMMA));
 	}
 
@@ -421,6 +423,7 @@ static void objectClass(Parser* parser, Compiler* compiler, bool canAssign) {
 
 	if (parser->current.type != TOKEN_RIGHT_BRACE) {
 		do {
+			emitByte(parser, compiler, OP_DUP);
 			consume(parser, TOKEN_IDENTIFIER, "Expected identifier key for object key-value pair.");
 
 			uint8_t name = identifierConstant(parser, compiler, &parser->previous);
@@ -429,8 +432,9 @@ static void objectClass(Parser* parser, Compiler* compiler, bool canAssign) {
 
 			expression(parser, compiler);
 
-			emitByte(parser, compiler, OP_SET_PROPERTY_V);
+			emitByte(parser, compiler, OP_SET_PROPERTY);
 			emitByte(parser, compiler, name);
+			emitByte(parser, compiler, OP_POP);
 		} while (match(parser, TOKEN_COMMA));
 	}
 
@@ -1155,8 +1159,12 @@ static void importDeclaration(Parser* parser, Compiler* compiler) {
 	char* path = malloc(parser->previous.length + 1);
 	memcpy(path, parser->previous.start, parser->previous.length);
 	length += parser->previous.length;
+
+	Token filename = parser->previous;
+
 	while (match(parser, TOKEN_DOT)) {
 		consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
+		filename = parser->previous;
 		size_t oldSize = length;
 		length += parser->previous.length;
 		path = realloc(path, oldSize + length + 1);
@@ -1166,21 +1174,72 @@ static void importDeclaration(Parser* parser, Compiler* compiler) {
 
 	path[length] = '\0';
 
-	uint8_t name;
+	uint8_t varName;
 
 	uint8_t pathConstant = makeConstant(parser, compiler, OBJ_VAL(copyString(compiler->vm, path, length)));
 
+	uint8_t fileNameConstant = makeConstant(parser, compiler, OBJ_VAL(copyString(compiler->vm, filename.start, filename.length)));
+
 	if (match(parser, TOKEN_AS)) {
 		consume(parser, TOKEN_IDENTIFIER, "Expected import alias.");
-		name = identifierConstant(parser, compiler, &parser->previous);
+		varName = identifierConstant(parser, compiler, &parser->previous);
 	}
 	else {
-		name = identifierConstant(parser, compiler, &parser->previous);
+		varName = identifierConstant(parser, compiler, &parser->previous);
 	}
+	declareVariable(parser, compiler);
 
 	emitByte(parser, compiler, OP_IMPORT);
 	emitByte(parser, compiler, pathConstant);
-	emitByte(parser, compiler, name);
+	emitByte(parser, compiler, fileNameConstant);
+
+	defineVariable(parser, compiler, varName);
+
+
+	consume(parser, TOKEN_SEMICOLON, "Expected ';' after import.");
+}
+
+static void fromDeclaration(Parser* parser, Compiler* compiler) {
+	consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
+
+	size_t length = 1;
+	char* path = malloc(parser->previous.length + 1);
+	memcpy(path, parser->previous.start, parser->previous.length);
+	length += parser->previous.length;
+
+	Token filename = parser->previous;
+
+	while (match(parser, TOKEN_DOT)) {
+		consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
+		filename = parser->previous;
+		size_t oldSize = length;
+		length += parser->previous.length;
+		path = realloc(path, oldSize + length + 1);
+		path[oldSize - 1] = '/';
+		memcpy(path + oldSize, parser->previous.start, parser->previous.length);
+	}
+
+	path[length] = '\0';
+
+	uint8_t pathConstant = makeConstant(parser, compiler, OBJ_VAL(copyString(compiler->vm, path, length)));
+
+	uint8_t fileNameConstant = makeConstant(parser, compiler, OBJ_VAL(copyString(compiler->vm, filename.start, filename.length)));
+
+	consume(parser, TOKEN_IMPORT, "Expected 'import' after import path.");
+
+	emitByte(parser, compiler, OP_IMPORT);
+	emitByte(parser, compiler, pathConstant);
+	emitByte(parser, compiler, fileNameConstant);
+
+	do {
+		uint8_t name = parseVariable(parser, compiler, "Expected export name.");
+
+		emitByte(parser, compiler, OP_DUP);
+		emitByte(parser, compiler, OP_GET_PROPERTY);
+		emitByte(parser, compiler, name);
+		defineVariable(parser, compiler, name);
+	} while (match(parser, TOKEN_COMMA));
+	emitByte(parser, compiler, OP_POP);
 
 	consume(parser, TOKEN_SEMICOLON, "Expected ';' after import.");
 }
@@ -1197,6 +1256,9 @@ static void declaration(Parser* parser, Compiler* compiler) {
 	}
 	else if (match(parser, TOKEN_IMPORT)) {
 		importDeclaration(parser, compiler);
+	}
+	else if (match(parser, TOKEN_FROM)) {
+		fromDeclaration(parser, compiler);
 	}
 	else {
 		statement(parser, compiler);
