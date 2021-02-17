@@ -17,7 +17,7 @@
 #include <math.h>
 #include <io.h>
 
-static InterpreterResult import(VM* vm, char* path, ObjString* name);
+static InterpreterResult import(VM* vm, char* path, ObjString* name, Value* value);
 
 void initVM(VM* vm) {
 	vm->stackTop = vm->stack;
@@ -414,6 +414,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_DUP: push(vm, peek(vm, 0)); break;
+
 			case OP_NULL: push(vm, NULL_VAL); break;
 			case OP_TRUE: push(vm, BOOL_VAL(true)); break;
 			case OP_FALSE: push(vm, BOOL_VAL(false)); break;
@@ -725,21 +727,6 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
-			case OP_SET_PROPERTY_V: {
-				if (!IS_INSTANCE(peek(vm, 1))) {
-					runtimeError(vm, "Only instances can contain properties.");
-					return STATUS_RUNTIME_ERR;
-				}
-
-				ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
-				tableSet(vm, &instance->fields, READ_STRING(), peek(vm, 0));
-
-				pop(vm);
-				/*Value pop(vm);
-				push(vm, value);*/
-				break;
-			}
-
 			case OP_LIST: {
 				uint8_t itemCount = READ_BYTE();
 
@@ -908,7 +895,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				string[path->length + vm->basePath->length + 4] = '\0';
 
 				if (_access(string, 0) == 0) {
-					import(vm, string, name);
+					Value object;
+					import(vm, string, name, &object);
+					push(vm, object);
 				}
 				else {
 					runtimeError(vm, "Could not find import '%s'", path->chars);
@@ -982,7 +971,7 @@ InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char
 	return execute(vm, &vm->frames[vm->frameCount - 1].closure->function->chunk);
 }
 
-InterpreterResult import(VM* importingVm, char* path, ObjString* name) {
+InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* value) {
 	VM* vm = malloc(sizeof(VM));
 	initVM(vm);
 
@@ -1023,7 +1012,9 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name) {
 		}
 	}
 
-	tableSet(importingVm, &importingVm->globals, name, OBJ_VAL(obj));
+	//tableSet(importingVm, &importingVm->globals, name, OBJ_VAL(obj));
+
+	*value = OBJ_VAL(obj);
 
 	// Cleans up memory which can no longer be accessed.
 	collectGarbage(vm);

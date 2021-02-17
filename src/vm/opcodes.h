@@ -1,6 +1,7 @@
 #pragma once
 typedef enum {
 	OP_CONSTANT, // OP_CONSTANT_W
+	OP_DUP,
 	OP_NULL,
 	OP_TRUE,
 	OP_FALSE,
@@ -33,7 +34,6 @@ typedef enum {
 	OP_SET_UPVALUE,
 	OP_GET_PROPERTY,
 	OP_SET_PROPERTY,
-	OP_SET_PROPERTY_V,
 	OP_JUMP_IF_FALSE,
 	OP_JUMP_IF_FALSE_S,
 	OP_JUMP,
