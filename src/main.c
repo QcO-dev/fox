@@ -36,17 +36,7 @@ static void repl() {
 			break;
 		}
 
-
-
-		interpretVM(&vm, ".", line, scriptName);
-
-		/*Value lineVal = *vm.stackTop;
-
-		if (!IS_NULL(lineVal)) {
-			char* string = valueToString(lineVal);
-			printf("%s\n", string);
-			free(string);
-		}*/
+		interpretVM(&vm, ".", scriptName, line);
 	}
 	freeVM(&vm);
 }

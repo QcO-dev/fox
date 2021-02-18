@@ -67,12 +67,14 @@ typedef struct {
 
 ObjFunction* newFunction(struct VM* vm);
 
-typedef Value(*NativeFn)(VM* vm, size_t argCount, Value* args, bool* hasError);
+typedef Value(*NativeFn)(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError);
 
 typedef struct {
 	Obj obj;
 	size_t arity;
 	NativeFn function;
+	Value bound;
+	bool isBound;
 } ObjNative;
 
 ObjNative* newNative(VM* vm, NativeFn function, size_t arity);

@@ -13,11 +13,11 @@ void defineNative(VM* vm, Table* table, const char* name, NativeFn function, siz
 	pop(vm);
 }
 
-static Value clockNative(VM* vm, size_t argCount, Value* args, bool* hasError) {
+static Value clockNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
-static Value sqrtNative(VM* vm, size_t argCount, Value* args, bool* hasError) {
+static Value sqrtNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	if (!IS_NUMBER(args[0])) {
 		runtimeError(vm, "Expected first parameter to be a number.\nin sqrt");
 		*hasError = true;
