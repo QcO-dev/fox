@@ -1162,7 +1162,10 @@ static void importDeclaration(Parser* parser, Compiler* compiler) {
 
 	Token filename = parser->previous;
 
+	bool single = true;
+
 	while (match(parser, TOKEN_DOT)) {
+		single = false;
 		consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
 		filename = parser->previous;
 		size_t oldSize = length;
@@ -1171,6 +1174,8 @@ static void importDeclaration(Parser* parser, Compiler* compiler) {
 		path[oldSize-1] = '/';
 		memcpy(path + oldSize, parser->previous.start, parser->previous.length);
 	}
+
+	length -= single;
 
 	path[length] = '\0';
 
@@ -1209,7 +1214,10 @@ static void fromDeclaration(Parser* parser, Compiler* compiler) {
 
 	Token filename = parser->previous;
 
+	bool single = true;
+
 	while (match(parser, TOKEN_DOT)) {
+		single = false;
 		consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
 		filename = parser->previous;
 		size_t oldSize = length;
@@ -1218,6 +1226,8 @@ static void fromDeclaration(Parser* parser, Compiler* compiler) {
 		path[oldSize - 1] = '/';
 		memcpy(path + oldSize, parser->previous.start, parser->previous.length);
 	}
+
+	length -= single;
 
 	path[length] = '\0';
 
