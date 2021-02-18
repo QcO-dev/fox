@@ -88,8 +88,7 @@ void runtimeError(VM* vm, const char* format, ...) {
 	for (int i = vm->frameCount - 1; i >= 0; i--) {
 		CallFrame* frame = &vm->frames[i];
 		ObjFunction* function = frame->closure->function;
-		// -1 because the IP is sitting on the next instruction to be
-		// executed.
+		// -1 because the IP is sitting on the next instruction to be executed.
 		size_t instruction = frame->ip - function->chunk.code - 1;
 		fprintf(stderr, "[%d] in ", getLine(&function->chunk.table, instruction));
 		if (function->name == NULL) {
@@ -187,7 +186,7 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 	return true;
 }
 
-bool callValue(VM* vm, Value callee, size_t argCount, bool nativeNonGlobal) {
+bool callValue(VM* vm, Value callee, size_t argCount) {
 	if (IS_OBJ(callee)) {
 		switch (OBJ_TYPE(callee)) {
 
@@ -225,7 +224,7 @@ bool callValue(VM* vm, Value callee, size_t argCount, bool nativeNonGlobal) {
 
 				NativeFn native = AS_NATIVE(callee);
 				bool hasError = false;
-				Value result = native(vm, argCount, vm->stackTop - argCount - (nativeNonGlobal ? 1 : 0), &hasError);
+				Value result = native(vm, argCount, vm->stackTop - argCount, obj->isBound ? &obj->bound : NULL, &hasError);
 				vm->stackTop -= argCount + 1;
 				push(vm, result);
 				return !hasError;
@@ -319,7 +318,7 @@ static bool invoke(VM* vm, ObjString* name, int argCount) {
 		Value value;
 		if (tableGet(&instance->fields, name, &value)) {
 			vm->stackTop[-argCount - 1] = value;
-			return callValue(vm, value, argCount, false);
+			return callValue(vm, value, argCount);
 		}
 
 		return invokeFromClass(vm, instance->class, name, argCount);
@@ -328,7 +327,10 @@ static bool invoke(VM* vm, ObjString* name, int argCount) {
 		Value value;
 		if (tableGet(&vm->listMethods, name, &value)) {
 			vm->stackTop[-argCount - 1] = receiver;
-			return callValue(vm, value, argCount, true);
+			ObjNative* native = AS_NATIVE_OBJ(value);
+			native->isBound = true;
+			native->bound = receiver;
+			return callValue(vm, OBJ_VAL(native), argCount);
 		}
 
 		runtimeError(vm, "Unknown list method.");
@@ -339,7 +341,10 @@ static bool invoke(VM* vm, ObjString* name, int argCount) {
 		Value value;
 		if (tableGet(&vm->stringMethods, name, &value)) {
 			vm->stackTop[-argCount - 1] = receiver;
-			return callValue(vm, value, argCount, true);
+			ObjNative* native = AS_NATIVE_OBJ(value);
+			native->isBound = true;
+			native->bound = receiver;
+			return callValue(vm, OBJ_VAL(native), argCount);
 		}
 
 		runtimeError(vm, "Unknown string method.");
@@ -352,8 +357,6 @@ static bool invoke(VM* vm, ObjString* name, int argCount) {
 }
 
 InterpreterResult execute(VM* vm, Chunk* chunk) {
-	//vm->chunk = chunk;
-	//resetVM(vm);
 	CallFrame* frame = &vm->frames[vm->frameCount - 1];
 
 
@@ -479,11 +482,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			}
 
 			case OP_ADD: {
-				if (IS_STRING(peek(vm, 0)) || IS_STRING(peek(vm, 1))) {
-					concatenate(vm, IS_STRING(peek(vm, 0)), IS_STRING(peek(vm, 1)));
-					break;
-				}
-				else if (IS_LIST(peek(vm, 1))) {
+				if (IS_LIST(peek(vm, 1))) {
 					Value toAppend = pop(vm);
 					ObjList* list = AS_LIST(pop(vm));
 
@@ -497,6 +496,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					ObjList* nList = newList(vm, array);
 
 					push(vm, OBJ_VAL(nList));
+					break;
+				}
+				else if (IS_STRING(peek(vm, 0)) || IS_STRING(peek(vm, 1))) {
+					concatenate(vm, IS_STRING(peek(vm, 0)), IS_STRING(peek(vm, 1)));
 					break;
 				}
 
@@ -593,7 +596,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_CALL: {
 				int argCount = READ_BYTE();
-				if (!callValue(vm, peek(vm, argCount), argCount, false)) {
+				if (!callValue(vm, peek(vm, argCount), argCount)) {
 					return STATUS_RUNTIME_ERR;
 				}
 				frame = &vm->frames[vm->frameCount - 1];
@@ -692,24 +695,49 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			}
 
 			case OP_GET_PROPERTY: {
-				if (!IS_INSTANCE(peek(vm, 0))) {
+
+				ObjString* name = READ_STRING();
+
+				if (IS_INSTANCE(peek(vm, 0))) {
+					ObjInstance* instance = AS_INSTANCE(peek(vm, 0));
+
+					Value value;
+					if (tableGet(&instance->fields, name, &value)) {
+						pop(vm); // Instance.
+						push(vm, value);
+						break;
+					}
+					if (!bindMethod(vm, instance->class, name)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					break;
+				}
+
+				else if (IS_LIST(peek(vm, 0))) {
+					Value value;
+					tableGet(&vm->listMethods, name, &value);
+					ObjNative* native = AS_NATIVE_OBJ(value);
+					native->bound = peek(vm, 0);
+					native->isBound = true;
+					pop(vm);
+					push(vm, OBJ_VAL(native));
+					break;
+				}
+				else if (IS_STRING(peek(vm, 0))) {
+					Value value;
+					tableGet(&vm->stringMethods, name, &value);
+					ObjNative* native = AS_NATIVE_OBJ(value);
+					native->bound = peek(vm, 0);
+					native->isBound = true;
+					pop(vm);
+					push(vm, OBJ_VAL(native));
+					break;
+				}
+
+				else {
 					runtimeError(vm, "Only instances can contain properties.");
 					return STATUS_RUNTIME_ERR;
 				}
-
-				ObjInstance* instance = AS_INSTANCE(peek(vm, 0));
-				ObjString* name = READ_STRING();
-
-				Value value;
-				if (tableGet(&instance->fields, name, &value)) {
-					pop(vm); // Instance.
-					push(vm, value);
-					break;
-				}
-				if (!bindMethod(vm, instance->class, name)) {
-					return STATUS_RUNTIME_ERR;
-				}
-				break;
 			}
 
 			case OP_SET_PROPERTY: {
@@ -966,7 +994,7 @@ InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char
 	ObjClosure* closure = newClosure(vm, function);
 	pop(vm);
 	push(vm, OBJ_VAL(closure));
-	callValue(vm, OBJ_VAL(closure), 0, false);
+	callValue(vm, OBJ_VAL(closure), 0);
 
 	return execute(vm, &vm->frames[vm->frameCount - 1].closure->function->chunk);
 }
@@ -998,7 +1026,7 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 	ObjClosure* closure = newClosure(vm, function);
 	pop(vm);
 	push(vm, OBJ_VAL(closure));
-	callValue(vm, OBJ_VAL(closure), 0, false);
+	callValue(vm, OBJ_VAL(closure), 0);
 
 	InterpreterResult result = execute(vm, &vm->frames[vm->frameCount - 1].closure->function->chunk);
 
@@ -1011,8 +1039,6 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 			tableSet(importingVm, &obj->fields, copyString(importingVm, entry->key->chars, entry->key->length), entry->value);
 		}
 	}
-
-	//tableSet(importingVm, &importingVm->globals, name, OBJ_VAL(obj));
 
 	*value = OBJ_VAL(obj);
 

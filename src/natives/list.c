@@ -3,12 +3,12 @@
 #include <vm/opcodes.h>
 #include <stdio.h>
 
-Value listLengthNative(VM* vm, size_t argCount, Value* args, bool* hasError) {
-	return NUMBER_VAL(AS_LIST(args[0])->items.count);
+Value listLengthNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
+	return NUMBER_VAL(AS_LIST(*bound)->items.count);
 }
 
-Value listAppendNative(VM* vm, size_t argCount, Value* args, bool* hasError) {
-	writeValueArray(vm, &AS_LIST(args[0])->items, args[1]);
+Value listAppendNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
+	writeValueArray(vm, &AS_LIST(*bound)->items, args[0]);
 	return NULL_VAL;
 }
 

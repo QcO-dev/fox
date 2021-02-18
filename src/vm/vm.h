@@ -65,6 +65,6 @@ void push(VM* vm, Value value);
 
 void runtimeError(VM* vm, const char* format, ...);
 
-bool callValue(VM* vm, Value callee, size_t argCount, bool nativeNonGlobal);
+bool callValue(VM* vm, Value callee, size_t argCount);
 
 Value peek(VM* vm, int distance);
