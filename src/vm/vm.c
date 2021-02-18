@@ -1048,7 +1048,10 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 	vm->filepath = takeString(vm, filepath, filepathIndex);
 
 	char* source = readFile(path);
-	if (source == NULL) return STATUS_RUNTIME_ERR;
+	if (source == NULL) { 
+		fprintf(stderr, "\n");
+		return STATUS_RUNTIME_ERR; 
+	}
 
 	ObjFunction* function = compile(vm, source, &chunk);
 	if (function == NULL) return STATUS_COMPILE_ERR;

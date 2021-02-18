@@ -1,12 +1,13 @@
 #include <core/common.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 char* readFile(const char* path) {
 	FILE* file = fopen(path, "rb");
 
 	if (file == NULL) {
-		fprintf(stderr, "Could not open file \"%s\".\n", path);
+		fprintf(stderr, "Could not open file \"%s\".", path);
 		return NULL;
 	}
 
@@ -16,7 +17,7 @@ char* readFile(const char* path) {
 
 	char* buffer = (char*)malloc(fileSize + 1);
 	if (buffer == NULL) {
-		fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
+		fprintf(stderr, "Not enough memory to read \"%s\".", path);
 		return NULL;
 	}
 
@@ -25,7 +26,7 @@ char* readFile(const char* path) {
 	buffer[bytesRead] = '\0';
 
 	if (bytesRead < fileSize) {
-		fprintf(stderr, "Could not read file \"%s\".\n", path);
+		fprintf(stderr, "Could not read file \"%s\".", path);
 		return NULL;
 	}
 
@@ -47,4 +48,22 @@ char* fromLastInstance(const char* haystack, const char* needle) {
 	}
 
 	return result;
+}
+
+char* inputString(FILE* fp, size_t size) {
+	char* str;
+	int ch;
+	size_t len = 0;
+	str = realloc(NULL, sizeof(*str) * size);//size is start size
+	if (!str)return str;
+	while (EOF != (ch = fgetc(fp)) && ch != '\n') {
+		str[len++] = ch;
+		if (len == size) {
+			str = realloc(str, sizeof(*str) * (size += 16));
+			if (!str)return str;
+		}
+	}
+	str[len++] = '\0';
+
+	return realloc(str, sizeof(*str) * len);
 }

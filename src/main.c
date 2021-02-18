@@ -20,7 +20,6 @@ static void replSigHandler(int _) {
 static void repl() {
 	// Register signal
 	signal(SIGINT, replSigHandler);
-	char line[1024]; // Max length, TODO
 
 	VM vm;
 	initVM(&vm);
@@ -31,12 +30,10 @@ static void repl() {
 	while (replKeepRunning) {
 		printf(">>> ");
 
-		if (!fgets(line, sizeof(line), stdin)) {
-			printf("\n");
-			break;
-		}
+		char* line = inputString(stdin, 30);
 
 		interpretVM(&vm, ".", scriptName, line);
+		free(line);
 	}
 	freeVM(&vm);
 }
@@ -62,7 +59,10 @@ static void runFile(const char* path) {
 	base[index + 1] = '\0';
 
 	char* source = readFile(path);
-	if (source == NULL) exit(-4);
+	if (source == NULL) {
+		fprintf(stderr, "\n");
+		exit(-4); 
+	}
 
 	char* name = malloc(strlen(fromLastInstance(slashRoot, "/")));
 	strcpy(name, fromLastInstance(slashRoot, "/") + 1);

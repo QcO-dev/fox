@@ -3,4 +3,3 @@ Release/
 *.vcxproj
 *.vcxproj.filters
 *.vcxproj.user
-!src/debug/
