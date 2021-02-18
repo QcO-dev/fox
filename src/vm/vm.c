@@ -922,21 +922,39 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 				char* extension = ".fox";
 
-				char* string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
+				char* string = malloc(path->length + vm->filepath->length + 4 /*.fox*/ + 1);
 
-				memcpy(string, vm->basePath->chars, vm->basePath->length);
-				memcpy(string + vm->basePath->length, path->chars, path->length);
-				memcpy(string + vm->basePath->length + path->length, extension, 4);
-				string[path->length + vm->basePath->length + 4] = '\0';
+				memcpy(string, vm->filepath->chars, vm->filepath->length);
+				memcpy(string + vm->filepath->length, path->chars, path->length);
+				memcpy(string + vm->filepath->length + path->length, extension, 4);
+				string[path->length + vm->filepath->length + 4] = '\0';
 
 				if (_access(string, 0) == 0) {
 					Value object;
 					import(vm, string, name, &object);
 					push(vm, object);
+					free(string);
 				}
 				else {
-					runtimeError(vm, "Could not find import '%s'", path->chars);
-					return STATUS_RUNTIME_ERR;
+					string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
+
+					memcpy(string, vm->basePath->chars, vm->basePath->length);
+					memcpy(string + vm->basePath->length, path->chars, path->length);
+					memcpy(string + vm->basePath->length + path->length, extension, 4);
+					string[path->length + vm->basePath->length + 4] = '\0';
+
+					if (_access(string, 0) == 0) {
+						Value object;
+						import(vm, string, name, &object);
+						push(vm, object);
+						free(string);
+					}
+
+					else {
+						runtimeError(vm, "Could not find import '%s'", path->chars);
+						free(string);
+						return STATUS_RUNTIME_ERR;
+					}
 				}
 
 				break;
@@ -988,6 +1006,7 @@ InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char
 	ObjString* base = copyString(vm, basePath, strlen(basePath));
 
 	vm->basePath = base;
+	vm->filepath = base;
 
 	vm->filename = filename;
 
@@ -1019,6 +1038,14 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 	vm->filename = malloc(name->length + 5);
 	strcpy(vm->filename, name->chars);
 	strcpy(vm->filename + name->length, ".fox");
+
+	int filepathIndex = (fromLastInstance(path, "/") - path) + 1;
+
+	char* filepath = malloc(filepathIndex + 1);
+	memcpy(filepath, path, filepathIndex);
+	filepath[filepathIndex] = '\0';
+
+	vm->filepath = takeString(vm, filepath, filepathIndex);
 
 	char* source = readFile(path);
 	if (source == NULL) return STATUS_RUNTIME_ERR;

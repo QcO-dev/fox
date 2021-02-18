@@ -1,5 +1,6 @@
 #include <core/common.h>
 #include <stdio.h>
+#include <string.h>
 
 char* readFile(const char* path) {
 	FILE* file = fopen(path, "rb");
@@ -30,4 +31,20 @@ char* readFile(const char* path) {
 
 	fclose(file);
 	return buffer;
+}
+
+char* fromLastInstance(const char* haystack, const char* needle) {
+	if (*needle == '\0')
+		return (char*)haystack;
+
+	char* result = NULL;
+	for (;;) {
+		char* p = strstr(haystack, needle);
+		if (p == NULL)
+			break;
+		result = p;
+		haystack = p + 1;
+	}
+
+	return result;
 }

@@ -42,6 +42,7 @@ struct VM {
 	size_t bytesAllocated;
 	size_t nextGC;
 	ObjString* basePath;
+	ObjString* filepath;
 	char* filename;
 	size_t importCount;
 	size_t importCapacity;

@@ -41,22 +41,6 @@ static void repl() {
 	freeVM(&vm);
 }
 
-static char* fromLastInstance(const char* haystack, const char* needle) {
-	if (*needle == '\0')
-		return (char*)haystack;
-
-	char* result = NULL;
-	for (;;) {
-		char* p = strstr(haystack, needle);
-		if (p == NULL)
-			break;
-		result = p;
-		haystack = p + 1;
-	}
-
-	return result;
-}
-
 static void runFile(const char* path) {
 	int length = strlen(path);
 	char* slashRoot = malloc(length + 1);
@@ -90,6 +74,7 @@ static void runFile(const char* path) {
 
 	if (result == STATUS_COMPILE_ERR) exit(-2);
 	if (result == STATUS_RUNTIME_ERR) exit(-3);
+
 }
 
 int main(int argc, const char** argv) {
