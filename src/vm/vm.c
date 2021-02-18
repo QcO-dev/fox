@@ -10,6 +10,7 @@
 #include <natives/globals.h>
 #include <natives/list.h>
 #include <natives/string.h>
+#include <natives/objectNative.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -45,9 +46,11 @@ void initVM(VM* vm) {
 
 	ObjClass* objectClass = newClass(vm, copyString(vm, "<object>", 8));
 	vm->objectClass = objectClass;
+	defineObjectMethods(vm, vm->objectClass);
 
 	ObjClass* importClass = newClass(vm, copyString(vm, "<import>", 8));
 	vm->importClass = importClass;
+	defineObjectMethods(vm, vm->importClass);
 
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 
@@ -298,20 +301,24 @@ static bool bindMethod(VM* vm, ObjClass* klass, ObjString* name) {
 	return true;
 }
 
-static bool invokeFromClass(VM* vm, ObjClass* klass, ObjString* name, size_t argCount) {
+static bool invokeFromClass(VM* vm, ObjInstance* instance, ObjClass* klass, ObjString* name, size_t argCount) {
 	Value method;
 	if (!tableGet(&klass->methods, name, &method)) {
 		runtimeError(vm, "Undefined property '%s'.", name->chars);
 		return false;
 	}
 
+	if (IS_NATIVE(method)) {
+		ObjNative* native = AS_NATIVE_OBJ(method);
+		native->isBound = true;
+		native->bound = OBJ_VAL(instance);
+		return callValue(vm, OBJ_VAL(native), argCount);
+	}
 	return call(vm, AS_CLOSURE(method), argCount);
 }
 
 static bool invoke(VM* vm, ObjString* name, int argCount) {
 	Value receiver = peek(vm, argCount);
-
-
 	if (IS_INSTANCE(receiver)) {
 		ObjInstance* instance = AS_INSTANCE(receiver);
 
@@ -321,7 +328,7 @@ static bool invoke(VM* vm, ObjString* name, int argCount) {
 			return callValue(vm, value, argCount);
 		}
 
-		return invokeFromClass(vm, instance->class, name, argCount);
+		return invokeFromClass(vm, instance, instance->class, name, argCount);
 	}
 	else if (IS_LIST(receiver)) {
 		Value value;
@@ -678,7 +685,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* method = READ_STRING();
 				size_t argCount = READ_BYTE();
 				ObjClass* superclass = AS_CLASS(pop(vm));
-				if (!invokeFromClass(vm, superclass, method, argCount)) {
+				if (!invokeFromClass(vm, AS_INSTANCE(frame->slots[0]), superclass, method, argCount)) {
 					return STATUS_RUNTIME_ERR;
 				}
 				frame = &vm->frames[vm->frameCount - 1];
