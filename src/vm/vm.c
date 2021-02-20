@@ -1105,5 +1105,6 @@ void freeVM(VM* vm) {
 	freeObjects(vm);
 	free(vm->filename);
 	free(vm->grayStack);
+	free(vm->imports);
 	if (vm->isImport) free(vm);
 }
