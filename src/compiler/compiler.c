@@ -77,7 +77,7 @@ typedef enum {
 	PREC_FACTOR,      // * /
 	PREC_UNARY,       // ! -
 	PREC_CALL,        // . () []
-	PREC_PRIMARY
+	PREC_PRIMARY      // x {}
 } Precedence;
 
 typedef struct {

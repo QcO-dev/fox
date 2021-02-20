@@ -171,6 +171,12 @@ static void markRoots(VM* vm) {
 
 	markTable(vm, &vm->globals);
 	markTable(vm, &vm->exports);
+	markTable(vm, &vm->stringMethods);
+	markTable(vm, &vm->listMethods);
+	markObject(vm, vm->filepath);
+	markObject(vm, vm->basePath);
+	markObject(vm, vm->importClass);
+	markObject(vm, vm->objectClass);
 	if(vm->compiler != NULL)
 		markCompilerRoots(vm->compiler);
 }

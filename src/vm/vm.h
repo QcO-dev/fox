@@ -46,7 +46,7 @@ struct VM {
 	char* filename;
 	size_t importCount;
 	size_t importCapacity;
-	struct VM** imports; // TODO
+	struct VM** imports;
 	bool isImport;
 };
 
