@@ -529,14 +529,6 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
-			case OP_PRINT: {
-				Value v = pop(vm);
-				char* string = valueToString(v);
-				printf("%s\n", string);
-				free(string);
-				break;
-			}
-
 			case OP_DEFINE_GLOBAL: {
 				ObjString* name = READ_STRING();
 				tableSet(vm, &vm->globals, name, peek(vm, 0));

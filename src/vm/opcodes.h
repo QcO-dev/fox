@@ -24,7 +24,6 @@ typedef enum {
 	OP_RSH,
 	OP_ASH,
 	OP_POP,
-	OP_PRINT,
 	OP_DEFINE_GLOBAL,
 	OP_GET_GLOBAL,
 	OP_SET_GLOBAL,
