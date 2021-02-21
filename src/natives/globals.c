@@ -49,9 +49,17 @@ static Value readNative(VM* vm, size_t argCount, Value* args, Value* bound, bool
 	return OBJ_VAL(takeString(vm, contents, strlen(contents)));
 }
 
+static Value printNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
+	char* rep = valueToString(args[0]);
+	printf("%s\n", rep);
+	free(rep);
+	return NULL_VAL;
+}
+
 void defineGlobalVariables(VM* vm) {
 	defineNative(vm, &vm->globals, "clock", clockNative, 0);
 	defineNative(vm, &vm->globals, "sqrt", sqrtNative, 1);
 	defineNative(vm, &vm->globals, "input", inputNative, 0);
 	defineNative(vm, &vm->globals, "read", readNative, 1);
+	defineNative(vm, &vm->globals, "print", printNative, 1);
 }

@@ -80,8 +80,14 @@ static Token errorToken(Scanner* scanner, const char* message) {
 }
 
 static Token string(Scanner* scanner) {
-	while (*scanner->current != '"' && !isAtEnd(scanner)) {
+	bool escape = false;
+	while (!isAtEnd(scanner)) {
+
+		if (*scanner->current == '"' && !escape) break;
+
 		if (*scanner->current == '\n') scanner->line++;
+		if (escape) escape = false;
+		if (*scanner->current == '\\') escape = true;
 		advance(scanner);
 	}
 
@@ -149,7 +155,6 @@ static TokenType identifierType(Scanner* scanner) {
 			break;
 		}
 		case 'n': return checkKeyword(scanner, 1, 3, "ull", TOKEN_NULL);
-		case 'p': return checkKeyword(scanner, 1, 4, "rint", TOKEN_PRINT);
 		case 'r': return checkKeyword(scanner, 1, 5, "eturn", TOKEN_RETURN);
 		case 's': return checkKeyword(scanner, 1, 4, "uper", TOKEN_SUPER);
 		case 'v': return checkKeyword(scanner, 1, 2, "ar", TOKEN_VAR);

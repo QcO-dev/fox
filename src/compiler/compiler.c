@@ -367,8 +367,67 @@ static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
 	}
 }
 
+void replaceEscapes(char at[], char bt[]) {
+	int j;
+	for (j = 0; bt[j]; ++j) {
+		if (bt[j] == '\\') {
+			j++;
+			switch (bt[j]) {
+				case 'n':
+					*at++ = '\n';
+					continue;
+				case 'a':
+					*at++ = '\a';
+					continue;
+				case 'b':
+					*at++ = '\b';
+					continue;
+				case 'f':
+					*at++ = '\f';
+					continue;
+				case 'r':
+					*at++ = '\r';
+					continue;
+				case 't':
+					*at++ = '\t';
+					continue;
+				case 'v':
+					*at++ = '\v';
+					continue;
+				case '\'':
+					*at++ = '\'';
+					continue;
+				case '\"':
+					*at++ = '\"';
+					continue;
+				case '\\':
+					*at++ = '\\';
+					continue;
+				default:
+					break;
+			}
+		}
+		*at++ = bt[j];
+	}
+	*at = '\0';
+}
+
 static void string(Parser* parser, Compiler* compiler, bool canAssign) {
-	emitConstant(parser, compiler, OBJ_VAL(copyString(parser->vm, parser->previous.start + 1, parser->previous.length - 2)));
+	char* dest = malloc(parser->previous.length - 1);
+
+	memcpy(dest, parser->previous.start + 1, parser->previous.length - 2);
+	dest[parser->previous.length - 2] = '\0';
+
+	char* nullString = malloc(parser->previous.length - 1);
+	memcpy(nullString, parser->previous.start + 1, parser->previous.length - 2);
+	nullString[parser->previous.length - 2] = '\0';
+
+	replaceEscapes(dest, nullString);
+
+	emitConstant(parser, compiler, OBJ_VAL(copyString(parser->vm, dest, parser->previous.length - 2)));
+
+	free(dest);
+	free(nullString);
 }
 
 static void list(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -741,12 +800,6 @@ static void variable(Parser* parser, Compiler* compiler, bool canAssign) {
 	namedVariable(parser, compiler, parser->previous, canAssign);
 }
 
-static void printStatement(Parser* parser, Compiler* compiler) {
-	expression(parser, compiler);
-	consume(parser, TOKEN_SEMICOLON, "Expect ';' after value.");
-	emitByte(parser, compiler, OP_PRINT);
-}
-
 static void expressionStatement(Parser* parser, Compiler* compiler) {
 	expression(parser, compiler);
 	consume(parser, TOKEN_SEMICOLON, "Expect ';' after expression.");
@@ -893,10 +946,7 @@ static void endScope(Parser* parser, Compiler* compiler) {
 }
 
 static void statement(Parser* parser, Compiler* compiler) {
-	if (match(parser, TOKEN_PRINT)) {
-		printStatement(parser, compiler);
-	}
-	else if (match(parser, TOKEN_IF)) {
+	if (match(parser, TOKEN_IF)) {
 		ifStatement(parser, compiler);
 	}
 	else if (match(parser, TOKEN_WHILE)) {
@@ -934,7 +984,6 @@ static void synchronize(Parser* parser) {
 			case TOKEN_FOR:
 			case TOKEN_IF:
 			case TOKEN_WHILE:
-			case TOKEN_PRINT:
 			case TOKEN_RETURN:
 				return;
 
@@ -1319,7 +1368,6 @@ ParseRule rules[] = {
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
   [TOKEN_IF] = {NULL, ternaryIf, PREC_TERNARY},
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
-  [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},
   [TOKEN_THIS] = {this, NULL, PREC_NONE},
