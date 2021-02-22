@@ -70,7 +70,7 @@ typedef enum {
 	PREC_BIT_OR,      // |
 	PREC_XOR,         // ^
 	PREC_BIT_AND,     // &
-	PREC_EQUALITY,    // == !=
+	PREC_EQUALITY,    // == != is
 	PREC_COMPARISON,  // < > <= >=
 	PREC_SHIFT,       // << >> >>>
 	PREC_TERM,        // + -
@@ -355,6 +355,11 @@ static void grouping(Parser* parser, Compiler* compiler, bool canAssign) {
 
 static void expression(Parser* parser, Compiler* compiler) {
 	parsePrecedence(parser, compiler, PREC_ASSIGNMENT);
+}
+
+static void is(Parser* parser, Compiler* compiler, bool canAssign) {
+	expression(parser, compiler);
+	emitByte(parser, compiler, OP_IS);
 }
 
 static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -1367,6 +1372,7 @@ ParseRule rules[] = {
   [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
   [TOKEN_IF] = {NULL, ternaryIf, PREC_TERNARY},
+  [TOKEN_IS] = {NULL, is, PREC_ASSIGNMENT},
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},

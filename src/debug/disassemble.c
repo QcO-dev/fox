@@ -108,7 +108,6 @@ size_t disassembleInstruction(Chunk* chunk, size_t offset) {
 		case OP_LESS: return simpleInstruction("LESS", offset);
 		case OP_LESS_EQ: return simpleInstruction("LESS_EQ", offset);
 		case OP_POP: return simpleInstruction("POP", offset);
-		case OP_PRINT: return simpleInstruction("PRINT", offset);
 		case OP_CONSTANT: return constantInstruction("CONSTANT", offset, chunk);
 		case OP_DEFINE_GLOBAL: return constantInstruction("DEFINE_GLOBAL", offset, chunk);
 		case OP_SET_GLOBAL: return constantInstruction("SET_GLOBAL", offset, chunk);
