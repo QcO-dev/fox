@@ -529,6 +529,21 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_IS: {
+
+				Value b = pop(vm);
+				Value a = pop(vm);
+
+				if (a.type == VAL_OBJ && b.type == VAL_OBJ) {
+					push(vm, BOOL_VAL(a.obj == b.obj));
+				}
+				else {
+					push(vm, BOOL_VAL(valuesEqual(a, b)));
+				}
+
+				break;
+			}
+
 			case OP_DEFINE_GLOBAL: {
 				ObjString* name = READ_STRING();
 				tableSet(vm, &vm->globals, name, peek(vm, 0));
