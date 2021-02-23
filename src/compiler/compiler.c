@@ -362,6 +362,11 @@ static void is(Parser* parser, Compiler* compiler, bool canAssign) {
 	emitByte(parser, compiler, OP_IS);
 }
 
+static void in(Parser* parser, Compiler* compiler, bool canAssign) {
+	expression(parser, compiler);
+	emitByte(parser, compiler, OP_IN);
+}
+
 static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
 	switch (parser->previous.type) {
 		case TOKEN_FALSE: emitByte(parser, compiler, OP_FALSE); break;
@@ -1373,6 +1378,7 @@ ParseRule rules[] = {
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
   [TOKEN_IF] = {NULL, ternaryIf, PREC_TERNARY},
   [TOKEN_IS] = {NULL, is, PREC_ASSIGNMENT},
+  [TOKEN_IN] = {NULL, in, PREC_COMPARISON},
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},
