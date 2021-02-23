@@ -44,7 +44,7 @@ static void runFile(const char* path) {
 	strcpy(slashRoot, path);
 
 	char currentChar; int i;
-	for (char currentChar = *slashRoot, i = 0; currentChar != '\0'; i++) {
+	for (currentChar = *slashRoot, i = 0; currentChar != '\0'; i++) {
 		currentChar = slashRoot[i];
 		if (currentChar == '\\') {
 			slashRoot[i] = '/';

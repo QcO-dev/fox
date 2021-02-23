@@ -566,6 +566,45 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_RANGE: {
+				Value b = pop(vm);
+				Value a = pop(vm);
+
+				if (IS_NUMBER(a) && IS_NUMBER(b)) {
+					double da = AS_NUMBER(a);
+					double db = AS_NUMBER(b);
+					if (ceil(da) != da || ceil(db) != db) {
+						runtimeError(vm, "Operands must be integers.");
+						return STATUS_RUNTIME_ERR;
+					}
+					int64_t ia = (int64_t)da;
+					int64_t ib = (int64_t)db;
+
+					ValueArray array;
+					initValueArray(&array);
+
+					if (ib > ia) {
+
+						for (int64_t i = ia; i < ib; i++) {
+							writeValueArray(vm, &array, NUMBER_VAL(i));
+						}
+
+					}
+					else {
+						for (int64_t i = ia; i > ib; i--) {
+							writeValueArray(vm, &array, NUMBER_VAL(i));
+						}
+					}
+					push(vm, OBJ_VAL(newList(vm, array)));
+				}
+				else {
+					runtimeError(vm, "Operands must be numbers.");
+					return STATUS_RUNTIME_ERR;
+				}
+
+				break;
+			}
+
 			case OP_DEFINE_GLOBAL: {
 				ObjString* name = READ_STRING();
 				tableSet(vm, &vm->globals, name, peek(vm, 0));

@@ -156,6 +156,7 @@ size_t disassembleInstruction(Chunk* chunk, size_t offset) {
 		case OP_IMPORT: return importInstruction("IMPORT", offset, chunk);
 		case OP_IS: return simpleInstruction("IS", offset);
 		case OP_IN: return simpleInstruction("IN", offset);
+		case OP_RANGE: return simpleInstruction("RANGE", offset);
 		default:
 			printf("Unknown opcode: %02X", instruction);
 			return offset + 1;

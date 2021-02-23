@@ -75,6 +75,7 @@ typedef enum {
 	PREC_SHIFT,       // << >> >>>
 	PREC_TERM,        // + -
 	PREC_FACTOR,      // * /
+	PREC_RANGE,       // x..y
 	PREC_UNARY,       // ! -
 	PREC_CALL,        // . () []
 	PREC_PRIMARY      // x {}
@@ -365,6 +366,11 @@ static void is(Parser* parser, Compiler* compiler, bool canAssign) {
 static void in(Parser* parser, Compiler* compiler, bool canAssign) {
 	expression(parser, compiler);
 	emitByte(parser, compiler, OP_IN);
+}
+
+static void range(Parser* parser, Compiler* compiler, bool canAssign) {
+	expression(parser, compiler);
+	emitByte(parser, compiler, OP_RANGE);
 }
 
 static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -1345,6 +1351,7 @@ ParseRule rules[] = {
   [TOKEN_RIGHT_SQBR] = {NULL, NULL, PREC_NONE},
   [TOKEN_COMMA] = {NULL, NULL, PREC_NONE},
   [TOKEN_DOT] = {NULL, dot, PREC_CALL},
+  [TOKEN_D_ELLIPSIS] = {NULL, range, PREC_RANGE},
   [TOKEN_MINUS] = {unary,  binary, PREC_TERM},
   [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
   [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE},
