@@ -13,6 +13,8 @@ typedef enum {
 	OP_NOT,
 	OP_EQUAL,
 	OP_IS,
+	OP_IN,
+	OP_RANGE,
 	OP_GREATER,
 	OP_LESS,
 	OP_GREATER_EQ,

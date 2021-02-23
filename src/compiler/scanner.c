@@ -151,6 +151,7 @@ static TokenType identifierType(Scanner* scanner) {
 			switch (scanner->start[1]) {
 				case 'f': return checkKeyword(scanner, 2, 0, "", TOKEN_IF);
 				case 's': return checkKeyword(scanner, 2, 0, "", TOKEN_IS);
+				case 'n': return checkKeyword(scanner, 2, 0, "", TOKEN_IN);
 				case 'm': return checkKeyword(scanner, 2, 4, "port", TOKEN_IMPORT);
 			}
 			break;
@@ -212,13 +213,15 @@ Token scanToken(Scanner* scanner) {
 		case ';': return makeToken(scanner, TOKEN_SEMICOLON);
 		case ':': return makeToken(scanner, TOKEN_COLON);
 		case ',': return makeToken(scanner, TOKEN_COMMA);
-		case '.': return makeToken(scanner, TOKEN_DOT);
 		case '-': return makeToken(scanner, TOKEN_MINUS);
 		case '+': return makeToken(scanner, TOKEN_PLUS);
 		case '/': return makeToken(scanner, TOKEN_SLASH);
 		case '*': return makeToken(scanner, TOKEN_STAR);
 		case '~': return makeToken(scanner, TOKEN_BIT_NOT);
 		case '^': return makeToken(scanner, TOKEN_XOR);
+
+		case '.': return makeToken(scanner,
+			match(scanner, '.') ? TOKEN_D_ELLIPSIS : TOKEN_DOT);
 
 		case '!':
 			return makeToken(scanner,

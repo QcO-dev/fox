@@ -75,6 +75,7 @@ typedef enum {
 	PREC_SHIFT,       // << >> >>>
 	PREC_TERM,        // + -
 	PREC_FACTOR,      // * /
+	PREC_RANGE,       // x..y
 	PREC_UNARY,       // ! -
 	PREC_CALL,        // . () []
 	PREC_PRIMARY      // x {}
@@ -360,6 +361,16 @@ static void expression(Parser* parser, Compiler* compiler) {
 static void is(Parser* parser, Compiler* compiler, bool canAssign) {
 	expression(parser, compiler);
 	emitByte(parser, compiler, OP_IS);
+}
+
+static void in(Parser* parser, Compiler* compiler, bool canAssign) {
+	expression(parser, compiler);
+	emitByte(parser, compiler, OP_IN);
+}
+
+static void range(Parser* parser, Compiler* compiler, bool canAssign) {
+	expression(parser, compiler);
+	emitByte(parser, compiler, OP_RANGE);
 }
 
 static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -1340,6 +1351,7 @@ ParseRule rules[] = {
   [TOKEN_RIGHT_SQBR] = {NULL, NULL, PREC_NONE},
   [TOKEN_COMMA] = {NULL, NULL, PREC_NONE},
   [TOKEN_DOT] = {NULL, dot, PREC_CALL},
+  [TOKEN_D_ELLIPSIS] = {NULL, range, PREC_RANGE},
   [TOKEN_MINUS] = {unary,  binary, PREC_TERM},
   [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
   [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE},
@@ -1373,6 +1385,7 @@ ParseRule rules[] = {
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
   [TOKEN_IF] = {NULL, ternaryIf, PREC_TERNARY},
   [TOKEN_IS] = {NULL, is, PREC_ASSIGNMENT},
+  [TOKEN_IN] = {NULL, in, PREC_COMPARISON},
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},

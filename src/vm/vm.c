@@ -530,7 +530,6 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			}
 
 			case OP_IS: {
-
 				Value b = pop(vm);
 				Value a = pop(vm);
 
@@ -539,6 +538,68 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 				else {
 					push(vm, BOOL_VAL(valuesEqual(a, b)));
+				}
+
+				break;
+			}
+
+			case OP_IN: {
+				Value b = pop(vm);
+				Value a = pop(vm);
+
+				if (IS_LIST(b)) {
+					ObjList* list = AS_LIST(b);
+					for (size_t i = 0; i < list->items.count; i++) {
+						if (valuesEqual(a, list->items.values[i])) {
+							push(vm, BOOL_VAL(true));
+							goto exitLoop;
+						}
+					}
+					push(vm, BOOL_VAL(false));
+				exitLoop:;
+				}
+				else {
+					runtimeError(vm, "Right hand operator must be iterable.");
+					return STATUS_RUNTIME_ERR;
+				}
+			
+				break;
+			}
+
+			case OP_RANGE: {
+				Value b = pop(vm);
+				Value a = pop(vm);
+
+				if (IS_NUMBER(a) && IS_NUMBER(b)) {
+					double da = AS_NUMBER(a);
+					double db = AS_NUMBER(b);
+					if (ceil(da) != da || ceil(db) != db) {
+						runtimeError(vm, "Operands must be integers.");
+						return STATUS_RUNTIME_ERR;
+					}
+					int64_t ia = (int64_t)da;
+					int64_t ib = (int64_t)db;
+
+					ValueArray array;
+					initValueArray(&array);
+
+					if (ib > ia) {
+
+						for (int64_t i = ia; i < ib; i++) {
+							writeValueArray(vm, &array, NUMBER_VAL(i));
+						}
+
+					}
+					else {
+						for (int64_t i = ia; i > ib; i--) {
+							writeValueArray(vm, &array, NUMBER_VAL(i));
+						}
+					}
+					push(vm, OBJ_VAL(newList(vm, array)));
+				}
+				else {
+					runtimeError(vm, "Operands must be numbers.");
+					return STATUS_RUNTIME_ERR;
 				}
 
 				break;
