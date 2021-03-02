@@ -49,7 +49,7 @@ bool valuesEqual(Value a, Value b) {
 	}
 }
 
-char* valueToString(Value value) {
+char* valueToString(VM* vm, Value value) {
 	
 	switch (value.type) {
 
@@ -73,7 +73,7 @@ char* valueToString(Value value) {
 			return buffer;
 		}
 		case VAL_OBJ: {
-			return objectToString(value);
+			return objectToString(vm, value);
 		}
 	}
 	return NULL; // Unreachable

@@ -50,7 +50,7 @@ static Value readNative(VM* vm, size_t argCount, Value* args, Value* bound, bool
 }
 
 static Value printNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
-	char* rep = valueToString(args[0]);
+	char* rep = valueToString(vm, args[0]);
 	printf("%s\n", rep);
 	free(rep);
 	return NULL_VAL;

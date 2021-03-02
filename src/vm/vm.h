@@ -24,6 +24,7 @@ typedef struct {
 struct VM {
 	Compiler* compiler;
 	CallFrame frames[FRAMES_MAX]; // Change
+	CallFrame* frame;
 	int frameCount;
 	Value stack[STACK_MAX]; // TODO: Dynamic stack
 	Value* stackTop;
@@ -67,5 +68,7 @@ void push(VM* vm, Value value);
 void runtimeError(VM* vm, const char* format, ...);
 
 bool callValue(VM* vm, Value callee, size_t argCount);
+
+bool invoke(VM* vm, ObjString* name, int argCount);
 
 Value peek(VM* vm, int distance);
