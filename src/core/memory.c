@@ -51,7 +51,7 @@ void markObject(VM* vm, Obj* object) {
 
 #ifdef FOX_DEBUG_LOG_GC
 	printf("%p mark ", (void*)object);
-	char* string = objectToString(OBJ_VAL(object));
+	char* string = objectToString(vm, OBJ_VAL(object));
 	printf("%s\n", string);
 	free(string);
 #endif
@@ -91,7 +91,7 @@ static void blackenObject(VM* vm, Obj* object) {
 
 #ifdef FOX_DEBUG_LOG_GC
 	printf("%p blacken ", (void*)object);
-	char* string = objectToString(OBJ_VAL(object));
+	char* string = objectToString(vm, OBJ_VAL(object));
 	printf("%s\n", string);
 	free(string);
 #endif
@@ -173,10 +173,10 @@ static void markRoots(VM* vm) {
 	markTable(vm, &vm->exports);
 	markTable(vm, &vm->stringMethods);
 	markTable(vm, &vm->listMethods);
-	markObject(vm, vm->filepath);
-	markObject(vm, vm->basePath);
-	markObject(vm, vm->importClass);
-	markObject(vm, vm->objectClass);
+	markObject(vm, &vm->filepath->obj);
+	markObject(vm, &vm->basePath->obj);
+	markObject(vm, &vm->importClass->obj);
+	markObject(vm, &vm->objectClass->obj);
 	if(vm->compiler != NULL)
 		markCompilerRoots(vm->compiler);
 }

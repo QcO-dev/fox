@@ -158,7 +158,7 @@ char* functionToString(ObjFunction* value) {
 }
 
 //TODO REPR functions
-char* objectToString(Value value) {
+char* objectToString(VM* vm, Value value) {
 	switch (OBJ_TYPE(value)) {
 
 		case OBJ_LIST: {
@@ -167,7 +167,7 @@ char* objectToString(Value value) {
 			size_t itemLengths = 1;
 
 			for (size_t i = 0; i < list->items.count; i++) {
-				itemLengths += snprintf(NULL, 0, i == list->items.count - 1 ? "%s" : "%s, ", valueToString(list->items.values[i]));
+				itemLengths += snprintf(NULL, 0, i == list->items.count - 1 ? "%s" : "%s, ", valueToString(vm, list->items.values[i]));
 			}
 
 			itemLengths += 1;
@@ -178,7 +178,7 @@ char* objectToString(Value value) {
 
 			size_t index = 1;
 			for (size_t i = 0; i < list->items.count; i++) {
-				index += sprintf(&buffer[index], i == list->items.count - 1 ? "%s" : "%s, ", valueToString(list->items.values[i]));
+				index += sprintf(&buffer[index], i == list->items.count - 1 ? "%s" : "%s, ", valueToString(vm, list->items.values[i]));
 			}
 
 			buffer[itemLengths - 1] = ']';
@@ -194,9 +194,11 @@ char* objectToString(Value value) {
 		}
 
 		case OBJ_INSTANCE: {
-			size_t sizeNeeded = snprintf(NULL, 0, "<instance %s>", AS_INSTANCE(value)->class->name->chars) + 1;
+			ObjInstance* inst = AS_INSTANCE(value);
+
+			size_t sizeNeeded = snprintf(NULL, 0, "<instance %s>", inst->class->name->chars) + 1;
 			char* buffer = malloc(sizeNeeded);
-			sprintf(buffer, "<instance %s>", AS_INSTANCE(value)->class->name->chars);
+			sprintf(buffer, "<instance %s>", inst->class->name->chars);
 			return buffer;
 		}
 

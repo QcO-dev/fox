@@ -43,13 +43,26 @@ bool valuesEqual(Value a, Value b) {
 		case VAL_BOOL: return AS_BOOL(a) == AS_BOOL(b);
 		case VAL_NULL: return true;
 		case VAL_NUMBER: return AS_NUMBER(a) == AS_NUMBER(b);
-		case VAL_OBJ: return AS_OBJ(a) == AS_OBJ(b);
+		case VAL_OBJ: 
+			if (AS_OBJ(a)->type == OBJ_LIST && AS_OBJ(b)->type == OBJ_LIST) {
+				ObjList* aList = AS_LIST(a);
+				ObjList* bList = AS_LIST(b);
+
+				if (aList->items.count != bList->items.count) return false;
+
+				for (size_t i = 0; i < aList->items.count; i++) {
+					if (!valuesEqual(aList->items.values[i], bList->items.values[i])) return false;
+				}
+				return true;
+			}
+			
+			return AS_OBJ(a) == AS_OBJ(b);
 		default:
 			return false; // Unreachable.
 	}
 }
 
-char* valueToString(Value value) {
+char* valueToString(VM* vm, Value value) {
 	
 	switch (value.type) {
 
@@ -73,7 +86,7 @@ char* valueToString(Value value) {
 			return buffer;
 		}
 		case VAL_OBJ: {
-			return objectToString(value);
+			return objectToString(vm, value);
 		}
 	}
 	return NULL; // Unreachable

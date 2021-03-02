@@ -30,7 +30,7 @@ typedef struct {
 void initValueArray(ValueArray* array);
 void writeValueArray(VM* vm, ValueArray* array, Value value);
 void freeValueArray(VM* vm, ValueArray* array);
-char* valueToString(Value value);
+char* valueToString(VM* vm, Value value);
 bool isFalsey(Value value);
 bool valuesEqual(Value a, Value b);
 

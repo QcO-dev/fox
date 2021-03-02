@@ -134,15 +134,15 @@ static void concatenate(VM* vm, bool firstString, bool secondString) {
 	else if (firstString) {
 		b = AS_STRING(peek(vm, 0));
 		Value aValue = peek(vm, 1);
-		// This breaks the GC
-		char* aChars = valueToString(aValue);
+
+		char* aChars = valueToString(vm, aValue);
 		a = copyString(vm, aChars, strlen(aChars));
 		free(aChars);
 		concat(vm, a, b);
 	}
 	else {
 		Value bValue = peek(vm, 0);
-		char* bChars = valueToString(bValue);
+		char* bChars = valueToString(vm, bValue);
 		b = copyString(vm, bChars, strlen(bChars));
 		free(bChars);
 		a = AS_STRING(peek(vm, 1));
@@ -317,7 +317,7 @@ static bool invokeFromClass(VM* vm, ObjInstance* instance, ObjClass* klass, ObjS
 	return call(vm, AS_CLOSURE(method), argCount);
 }
 
-static bool invoke(VM* vm, ObjString* name, int argCount) {
+bool invoke(VM* vm, ObjString* name, int argCount) {
 	Value receiver = peek(vm, argCount);
 	if (IS_INSTANCE(receiver)) {
 		ObjInstance* instance = AS_INSTANCE(receiver);
@@ -364,16 +364,24 @@ static bool invoke(VM* vm, ObjString* name, int argCount) {
 }
 
 InterpreterResult execute(VM* vm, Chunk* chunk) {
-	CallFrame* frame = &vm->frames[vm->frameCount - 1];
+	//CallFrame* frame = &vm->frames[vm->frameCount - 1];
+	vm->frame = &vm->frames[vm->frameCount - 1];
 
 
-#define READ_BYTE() (*frame->ip++)
-#define READ_SHORT() (frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
-#define READ_CONSTANT() (frame->closure->function->chunk.constants.values[READ_BYTE()])
+#define READ_BYTE() (*vm->frame->ip++)
+#define READ_SHORT() (vm->frame->ip += 2, (uint16_t)((vm->frame->ip[-2] << 8) | vm->frame->ip[-1]))
+#define READ_CONSTANT() (vm->frame->closure->function->chunk.constants.values[READ_BYTE()])
 #define READ_STRING() (AS_STRING(READ_CONSTANT()))
-
+	//TODO INST
 #define BINARY_OP(vm, valueType, op) \
 	do { \
+		if (IS_INSTANCE(peek(vm, 1))) { \
+			if (!invoke(vm, copyString(vm, #op, strlen(#op)), 1)) { \
+				return STATUS_RUNTIME_ERR; \
+			} \
+			vm->frame = &vm->frames[vm->frameCount - 1]; \
+			break; \
+	   } \
 	  if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) { \
 		runtimeError(vm, "Operands must be numbers."); \
 		return STATUS_RUNTIME_ERR; \
@@ -384,7 +392,14 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 	} while (false)
 
 #define BINARY_INTEGER_OP(vm, valueType, op) \
-    do { \
+	do { \
+	   if (IS_INSTANCE(peek(vm, 1))) { \
+			if (!invoke(vm, copyString(vm, #op, strlen(#op)), 1)) { \
+				return STATUS_RUNTIME_ERR; \
+			} \
+			vm->frame = &vm->frames[vm->frameCount - 1]; \
+			break; \
+	   } \
 	  if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) { \
 		runtimeError(vm, "Operands must be numbers."); \
 		return STATUS_RUNTIME_ERR; \
@@ -401,7 +416,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 		for (Value* slot = vm->stack; slot < vm->stackTop; slot++) {
 			Value v = *slot;
-			char* string = valueToString(v);
+			char* string = valueToString(vm, v);
 			printf("%s ", string);
 			free(string);
 		}
@@ -410,7 +425,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 #endif
 
 #ifdef FOX_DEBUG_EXEC_TRACE
-		disassembleInstruction(&frame->closure->function->chunk, (int)(frame->ip - frame->closure->function->chunk.code));
+		disassembleInstruction(vm, &vm->frame->closure->function->chunk, (int)(vm->frame->ip - vm->frame->closure->function->chunk.code));
 		printf("\n");
 #endif
 
@@ -433,6 +448,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			case OP_POP: pop(vm); break;
 
 			case OP_NEGATE: {
+
+				if (IS_INSTANCE(peek(vm, 0))) {
+					if (!invoke(vm, copyString(vm, "-", 1), 0)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
+
 				if (!IS_NUMBER(peek(vm, 0))) {
 					runtimeError(vm, "Operand must be a number."); //TODO
 					return STATUS_RUNTIME_ERR;
@@ -443,6 +467,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			}
 
 			case OP_BITWISE_NOT: {
+
+				if (IS_INSTANCE(peek(vm, 0))) {
+					if (!invoke(vm, copyString(vm, "~", 1), 0)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
+
 				if (!IS_NUMBER(peek(vm, 0))) {
 					runtimeError(vm, "Operand must be a number."); //TODO
 					return STATUS_RUNTIME_ERR;
@@ -460,6 +493,13 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			case OP_XOR: BINARY_INTEGER_OP(vm, NUMBER_VAL, ^); break;
 			case OP_LSH: BINARY_INTEGER_OP(vm, NUMBER_VAL, <<); break;
 			case OP_RSH: {
+				if (IS_INSTANCE(peek(vm, 1))) {
+					if (!invoke(vm, copyString(vm, ">>", 2), 1)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
 				if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) {
 					runtimeError(vm, "Operands must be numbers.");
 					return STATUS_RUNTIME_ERR;
@@ -474,6 +514,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			case OP_EQUAL: {
 				Value b = pop(vm);
 				Value a = pop(vm);
+				if (IS_INSTANCE(a)) {
+					push(vm, a);
+					push(vm, b);
+					if (!invoke(vm, copyString(vm, "==", 2), 1)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
 				push(vm, BOOL_VAL(valuesEqual(a, b)));
 				break;
 			}
@@ -635,37 +684,37 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_GET_LOCAL: {
 				uint8_t slot = READ_BYTE();
-				push(vm, frame->slots[slot]);
+				push(vm, vm->frame->slots[slot]);
 				break;
 			}
 
 			case OP_SET_LOCAL: {
 				uint8_t slot = READ_BYTE();
-				frame->slots[slot] = peek(vm, 0);
+				vm->frame->slots[slot] = peek(vm, 0);
 				break;
 			}
 
 			case OP_JUMP_IF_FALSE: {
 				uint16_t offset = READ_SHORT();
-				if (isFalsey(pop(vm))) frame->ip += offset;
+				if (isFalsey(pop(vm))) vm->frame->ip += offset;
 				break;
 			}
 
 			case OP_JUMP_IF_FALSE_S: {
 				uint16_t offset = READ_SHORT();
-				if (isFalsey(peek(vm, 0))) frame->ip += offset;
+				if (isFalsey(peek(vm, 0))) vm->frame->ip += offset;
 				break;
 			}
 
 			case OP_JUMP: {
 				uint16_t offset = READ_SHORT();
-				frame->ip += offset;
+				vm->frame->ip += offset;
 				break;
 			}
 
 			case OP_LOOP: {
 				uint16_t offset = READ_SHORT();
-				frame->ip -= offset;
+				vm->frame->ip -= offset;
 				break;
 			}
 
@@ -674,7 +723,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				if (!callValue(vm, peek(vm, argCount), argCount)) {
 					return STATUS_RUNTIME_ERR;
 				}
-				frame = &vm->frames[vm->frameCount - 1];
+				vm->frame = &vm->frames[vm->frameCount - 1];
 				break;
 			}
 
@@ -686,10 +735,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					uint8_t isLocal = READ_BYTE();
 					uint8_t index = READ_BYTE();
 					if (isLocal) {
-						closure->upvalues[i] = captureUpvalue(vm, frame->slots + index);
+						closure->upvalues[i] = captureUpvalue(vm, vm->frame->slots + index);
 					}
 					else {
-						closure->upvalues[i] = frame->closure->upvalues[index];
+						closure->upvalues[i] = vm->frame->closure->upvalues[index];
 					}
 				}
 				break;
@@ -701,19 +750,19 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				if (!invoke(vm, method, argCount)) {
 					return STATUS_RUNTIME_ERR;
 				}
-				frame = &vm->frames[vm->frameCount - 1];
+				vm->frame = &vm->frames[vm->frameCount - 1];
 				break;
 			}
 
 			case OP_GET_UPVALUE: {
 				uint8_t slot = READ_BYTE();
-				push(vm, *frame->closure->upvalues[slot]->location);
+				push(vm, *vm->frame->closure->upvalues[slot]->location);
 				break;
 			}
 
 			case OP_SET_UPVALUE: {
 				uint8_t slot = READ_BYTE();
-				*frame->closure->upvalues[slot]->location = peek(vm, 0);
+				*vm->frame->closure->upvalues[slot]->location = peek(vm, 0);
 				break;
 			}
 
@@ -753,10 +802,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* method = READ_STRING();
 				size_t argCount = READ_BYTE();
 				ObjClass* superclass = AS_CLASS(pop(vm));
-				if (!invokeFromClass(vm, AS_INSTANCE(frame->slots[0]), superclass, method, argCount)) {
+				if (!invokeFromClass(vm, AS_INSTANCE(vm->frame->slots[0]), superclass, method, argCount)) {
 					return STATUS_RUNTIME_ERR;
 				}
-				frame = &vm->frames[vm->frameCount - 1];
+				vm->frame = &vm->frames[vm->frameCount - 1];
 				break;
 			}
 
@@ -1031,7 +1080,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			case OP_RETURN: {
 				Value result = pop(vm);
 
-				closeUpvalues(vm, frame->slots);
+				closeUpvalues(vm, vm->frame->slots);
 
 				vm->frameCount--;
 				if (vm->frameCount == 0) {
@@ -1039,10 +1088,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_OK;
 				}
 
-				vm->stackTop = frame->slots;
+				vm->stackTop = vm->frame->slots;
 				push(vm, result);
 
-				frame = &vm->frames[vm->frameCount - 1];
+				vm->frame = &vm->frames[vm->frameCount - 1];
 				break;
 			}
 		}

@@ -1136,7 +1136,16 @@ static void funDeclaration(Parser* parser, Compiler* compiler) {
 
 static void method(Parser* parser, Compiler* compiler) {
 	consume(parser, TOKEN_IDENTIFIER, "Expect method name.");
-	uint8_t constant = identifierConstant(parser, compiler, &parser->previous);
+
+	uint8_t constant = 0;
+
+	if (parser->previous.length == 8 && memcmp(parser->previous.start, "operator", 8) == 0) {
+		advance(parser);
+		constant = identifierConstant(parser, compiler, &parser->previous);
+	}
+	else {
+		constant = identifierConstant(parser, compiler, &parser->previous);
+	}
 
 	FunctionType type = TYPE_METHOD;
 

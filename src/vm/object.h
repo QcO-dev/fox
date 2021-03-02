@@ -106,7 +106,7 @@ struct ObjString {
 
 ObjString* copyString(struct VM* vm, const char* chars, size_t length);
 
-char* objectToString(Value value);
+char* objectToString(VM* vm, Value value);
 
 ObjString* takeString(struct VM* vm, char* chars, int length);
 
