@@ -607,6 +607,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					push(vm, BOOL_VAL(false));
 				exitLoop:;
 				}
+				else if (IS_STRING(b)) {
+					if (!IS_STRING(a)) {
+						runtimeError(vm, "Can only test for strings within strings.");
+						return STATUS_RUNTIME_ERR;
+					}
+					char* string = AS_CSTRING(b);
+					char* needle = AS_CSTRING(a);
+					push(vm, BOOL_VAL(strstr(string, needle) != NULL));
+				}
 				else {
 					runtimeError(vm, "Right hand operator must be iterable.");
 					return STATUS_RUNTIME_ERR;
