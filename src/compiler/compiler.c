@@ -64,7 +64,7 @@ typedef void (*ParseFn)(Parser* parser, Compiler* compiler, bool canAssign);
 typedef enum {
 	PREC_NONE,
 	PREC_ASSIGNMENT,  // =
-	PREC_TERNARY,     // x if y else z
+	PREC_TERNARY,     // x ? y : z
 	PREC_OR,          // ||
 	PREC_AND,         // &&
 	PREC_BIT_OR,      // |
@@ -639,14 +639,13 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 	}
 }
 
-static void ternaryIf(Parser* parser, Compiler* compiler, bool canAssign) {
-	expression(parser, compiler);
+static void ternary(Parser* parser, Compiler* compiler, bool canAssign) {
 	int elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	expression(parser, compiler); // true value
 	int trueJump = emitJump(parser, compiler, OP_JUMP);
-	
 	patchJump(parser, compiler, elseJump);
-	if (match(parser, TOKEN_ELSE)) {
-		expression(parser, compiler);
+	if (match(parser, TOKEN_COLON)) {
+		expression(parser, compiler); //false value
 	}
 	else {
 		emitByte(parser, compiler, OP_NULL);
@@ -1386,14 +1385,15 @@ ParseRule rules[] = {
   [TOKEN_LSH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_RSH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_ASH] = {NULL, binary, PREC_SHIFT},
+  [TOKEN_QUESTION] = {NULL, ternary, PREC_TERNARY},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
   [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
   [TOKEN_EXTENDS] = {NULL, NULL, PREC_NONE},
   [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
   [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
-  [TOKEN_IF] = {NULL, ternaryIf, PREC_TERNARY},
-  [TOKEN_IS] = {NULL, is, PREC_ASSIGNMENT},
+  [TOKEN_IF] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IS] = {NULL, is, PREC_EQUALITY},
   [TOKEN_IN] = {NULL, in, PREC_COMPARISON},
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
