@@ -40,6 +40,9 @@ typedef struct Compiler {
 	Upvalue upvalues[UINT8_MAX + 1];
 	int localCount;
 	int scopeDepth;
+	bool isLoop;
+	int continuePoint;
+	int breakPoint;
 } Compiler;
 
 typedef struct ClassCompiler {
@@ -847,22 +850,26 @@ static void ifStatement(Parser* parser, Compiler* compiler) {
 }
 
 static void whileStatement(Parser* parser, Compiler* compiler) {
-
+	compiler->isLoop = true;
 	int loopStart = currentChunk(compiler)->count;
 
+	compiler->continuePoint = loopStart;
 	consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
 	expression(parser, compiler);
 	consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
 	int exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	compiler->breakPoint = exitJump;
 	statement(parser, compiler);
 
 	emitLoop(parser, compiler, loopStart);
 
 	patchJump(parser, compiler, exitJump);
+	compiler->isLoop = false;
 }
 
 static void forStatement(Parser* parser, Compiler* compiler) {
+	compiler->isLoop = true;
 	beginScope(compiler);
 
 	consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
@@ -878,7 +885,7 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 	}
 
 	int loopStart = currentChunk(compiler)->count;
-
+	compiler->continuePoint = loopStart;
 	int exitJump = -1;
 	if (!match(parser, TOKEN_SEMICOLON)) {
 		expression(parser, compiler);
@@ -886,6 +893,12 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 
 		// Jump out of the loop if the condition is false.
 		exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+		compiler->breakPoint = exitJump;
+	}
+	else {
+		emitByte(parser, compiler, OP_TRUE);
+		exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+		compiler->breakPoint = exitJump;
 	}
 
 	if (!match(parser, TOKEN_RIGHT_PAREN)) {
@@ -898,6 +911,7 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 
 		emitLoop(parser, compiler, loopStart);
 		loopStart = incrementStart;
+		compiler->continuePoint = incrementStart;
 		patchJump(parser, compiler, bodyJump);
 	}
 
@@ -910,6 +924,7 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 	}
 
 	endScope(parser, compiler);
+	compiler->isLoop = false;
 }
 
 static void returnStatement(Parser* parser, Compiler* compiler) {
@@ -980,6 +995,19 @@ static void statement(Parser* parser, Compiler* compiler) {
 	}
 	else if (match(parser, TOKEN_EXPORT)) {
 		exportStatement(parser, compiler);
+	}
+	else if (match(parser, TOKEN_CONTINUE)) {
+		if (!compiler->isLoop) error(parser, "Cannot use 'continue' outside of a loop.");
+		emitLoop(parser, compiler, compiler->continuePoint);
+		consume(parser, TOKEN_SEMICOLON, "Expect ';' after continue.");
+	}
+	else if (match(parser, TOKEN_BREAK)) {
+		if (!compiler->isLoop) error(parser, "Cannot use 'break' outside of a loop.");
+
+		emitByte(parser, compiler, OP_FALSE);
+		emitLoop(parser, compiler, compiler->breakPoint - 1);
+
+		consume(parser, TOKEN_SEMICOLON, "Expect ';' after break.");
 	}
 	else {
 		expressionStatement(parser, compiler);
@@ -1351,7 +1379,7 @@ static void declaration(Parser* parser, Compiler* compiler) {
 }
 
 ParseRule rules[] = {
-  [TOKEN_LEFT_PAREN] = {grouping, call, PREC_CALL}, 
+  [TOKEN_LEFT_PAREN] = {grouping, call, PREC_CALL},
   [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
   [TOKEN_LEFT_BRACE] = {object, objectClass, PREC_PRIMARY},
   [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE},
@@ -1376,9 +1404,9 @@ ParseRule rules[] = {
   [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE},
   [TOKEN_STRING] = {string, NULL, PREC_NONE},
   [TOKEN_NUMBER] = {number, NULL, PREC_NONE},
-  [TOKEN_AND] = {NULL, and, PREC_AND},
+  [TOKEN_AND] = {NULL,and, PREC_AND},
   [TOKEN_BIT_AND] = {NULL, binary, PREC_BIT_AND},
-  [TOKEN_OR] = {lambdaOr, or, PREC_OR},
+  [TOKEN_OR] = {lambdaOr, or , PREC_OR},
   [TOKEN_BIT_OR] = {lambda, binary, PREC_BIT_OR},
   [TOKEN_BIT_NOT] = {unary, NULL, PREC_NONE},
   [TOKEN_XOR] = {NULL, binary, PREC_XOR},
@@ -1386,7 +1414,9 @@ ParseRule rules[] = {
   [TOKEN_RSH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_ASH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_QUESTION] = {NULL, ternary, PREC_TERNARY},
+  [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
+  [TOKEN_CONTINUE] = {NULL, NULL, PREC_NONE},
   [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
   [TOKEN_EXTENDS] = {NULL, NULL, PREC_NONE},
   [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
