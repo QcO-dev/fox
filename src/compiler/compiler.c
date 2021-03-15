@@ -122,6 +122,7 @@ static void initCompiler(Compiler* compiler, Compiler* oldCompiler, VM* vm, Pars
 	compiler->type = type;
 	compiler->localCount = 0;
 	compiler->scopeDepth = 0;
+	compiler->isLoop = false;
 	compiler->function = newFunction(vm);
 	compiler->function->lambda = false;
 
