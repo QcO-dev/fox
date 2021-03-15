@@ -1086,6 +1086,38 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_TYPEOF: {
+				Value value = pop(vm);
+				
+				// These could be made to make copied strings for each case to avoid strlen (or added to VM)
+				char* stringRep = NULL;
+
+				if (!IS_OBJ(value)) {
+					switch (value.type) {
+						case VAL_BOOL: stringRep = "boolean"; break;
+						case VAL_NUMBER: stringRep = "number"; break;
+						case VAL_NULL: stringRep = "null"; break;
+					}
+				}
+				else {
+					switch (AS_OBJ(value)->type) {
+						case OBJ_CLOSURE:
+						case OBJ_BOUND_METHOD:
+						case OBJ_NATIVE:
+						case OBJ_FUNCTION:
+							stringRep = "function"; break;
+						case OBJ_CLASS: stringRep = "class"; break;
+						case OBJ_INSTANCE: stringRep = "object"; break;
+						case OBJ_STRING: stringRep = "string"; break;
+						case OBJ_LIST: stringRep = "list"; break;
+					}
+				}
+
+				push(vm, OBJ_VAL(copyString(vm, stringRep, strlen(stringRep))));
+
+				break;
+			}
+
 			case OP_RETURN: {
 				Value result = pop(vm);
 
