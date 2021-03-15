@@ -161,7 +161,14 @@ static TokenType identifierType(Scanner* scanner) {
 				case 'f': return checkKeyword(scanner, 2, 0, "", TOKEN_IF);
 				case 's': return checkKeyword(scanner, 2, 0, "", TOKEN_IS);
 				case 'n': return checkKeyword(scanner, 2, 0, "", TOKEN_IN);
-				case 'm': return checkKeyword(scanner, 2, 4, "port", TOKEN_IMPORT);
+				case 'm': {
+						if (scanner->start[2] == 'p') {
+							switch (scanner->start[3]) {
+								case 'o': return checkKeyword(scanner, 4, 2, "rt", TOKEN_IMPORT);
+								case 'l': return checkKeyword(scanner, 4, 6, "ements", TOKEN_IMPLEMENTS);
+							}
+						}
+					}
 			}
 			break;
 		}
