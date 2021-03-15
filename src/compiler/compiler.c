@@ -386,9 +386,8 @@ static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
 	}
 }
 
-void replaceEscapes(char at[], char bt[]) {
-	int j;
-	for (j = 0; bt[j]; ++j) {
+static void replaceEscapes(char at[], char bt[]) {
+	for (int j = 0; bt[j]; j++) {
 		if (bt[j] == '\\') {
 			j++;
 			switch (bt[j]) {
@@ -850,6 +849,11 @@ static void ifStatement(Parser* parser, Compiler* compiler) {
 }
 
 static void whileStatement(Parser* parser, Compiler* compiler) {
+
+	bool wasLoop = compiler->isLoop;
+	int prevBreakPoint = compiler->breakPoint;
+	int prevContinuePoint = compiler->continuePoint;
+
 	compiler->isLoop = true;
 	int loopStart = currentChunk(compiler)->count;
 
@@ -865,10 +869,17 @@ static void whileStatement(Parser* parser, Compiler* compiler) {
 	emitLoop(parser, compiler, loopStart);
 
 	patchJump(parser, compiler, exitJump);
-	compiler->isLoop = false;
+	compiler->isLoop = wasLoop;
+	compiler->breakPoint = prevBreakPoint;
+	compiler->continuePoint = prevContinuePoint;
 }
 
 static void forStatement(Parser* parser, Compiler* compiler) {
+
+	bool wasLoop = compiler->isLoop;
+	int prevBreakPoint = compiler->breakPoint;
+	int prevContinuePoint = compiler->continuePoint;
+
 	compiler->isLoop = true;
 	beginScope(compiler);
 
@@ -924,7 +935,9 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 	}
 
 	endScope(parser, compiler);
-	compiler->isLoop = false;
+	compiler->isLoop = wasLoop;
+	compiler->breakPoint = prevBreakPoint;
+	compiler->continuePoint = prevContinuePoint;
 }
 
 static void returnStatement(Parser* parser, Compiler* compiler) {
@@ -1404,9 +1417,9 @@ ParseRule rules[] = {
   [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE},
   [TOKEN_STRING] = {string, NULL, PREC_NONE},
   [TOKEN_NUMBER] = {number, NULL, PREC_NONE},
-  [TOKEN_AND] = {NULL,and, PREC_AND},
+  [TOKEN_AND] = {NULL, and, PREC_AND},
   [TOKEN_BIT_AND] = {NULL, binary, PREC_BIT_AND},
-  [TOKEN_OR] = {lambdaOr, or , PREC_OR},
+  [TOKEN_OR] = {lambdaOr, or, PREC_OR},
   [TOKEN_BIT_OR] = {lambda, binary, PREC_BIT_OR},
   [TOKEN_BIT_NOT] = {unary, NULL, PREC_NONE},
   [TOKEN_XOR] = {NULL, binary, PREC_XOR},
