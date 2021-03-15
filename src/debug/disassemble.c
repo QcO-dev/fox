@@ -157,6 +157,7 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 		case OP_IS: return simpleInstruction("IS", offset);
 		case OP_IN: return simpleInstruction("IN", offset);
 		case OP_RANGE: return simpleInstruction("RANGE", offset);
+		case OP_TYPEOF: return simpleInstruction("TYPEOF", offset);
 		default:
 			printf("Unknown opcode: %02X", instruction);
 			return offset + 1;
