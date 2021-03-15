@@ -1118,6 +1118,41 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_IMPLEMENTS: {
+				Value b = pop(vm);
+				Value a = pop(vm);
+
+				if (!IS_CLASS(b)) {
+					runtimeError(vm, "Right hand operand of an implements clause must be a class.");
+					return STATUS_RUNTIME_ERR;
+				}
+				if (!IS_INSTANCE(a)) {
+					runtimeError(vm, "Left hand operand of an implements clause must be an instance.");
+					return STATUS_RUNTIME_ERR;
+				}
+
+				ObjClass* class = AS_CLASS(b);
+				ObjInstance* inst = AS_INSTANCE(a);
+
+				for (int i = 0; i <= class->methods.capacity; i++) {
+					Entry* entry = &class->methods.entries[i];
+					if (entry->key != NULL) {
+						Value v;
+						bool instHasMethod = tableGet(&inst->class->methods, entry->key, &v);
+						if (!instHasMethod) {
+							push(vm, BOOL_VAL(false));
+							goto loopExit;
+						}
+					}
+				}
+
+				push(vm, BOOL_VAL(true));
+
+				loopExit:
+
+				break;
+			}
+
 			case OP_RETURN: {
 				Value result = pop(vm);
 

@@ -74,7 +74,7 @@ typedef enum {
 	PREC_XOR,         // ^
 	PREC_BIT_AND,     // &
 	PREC_EQUALITY,    // == != is
-	PREC_COMPARISON,  // < > <= >=
+	PREC_COMPARISON,  // < > <= >= implements
 	PREC_SHIFT,       // << >> >>>
 	PREC_TERM,        // + -
 	PREC_FACTOR,      // * /
@@ -349,6 +349,9 @@ static void binary(Parser* parser, Compiler* compiler, bool canAssign) {
 		case TOKEN_LSH: emitByte(parser, compiler, OP_LSH); break;
 		case TOKEN_RSH: emitByte(parser, compiler, OP_RSH); break;
 		case TOKEN_ASH: emitByte(parser, compiler, OP_ASH); break;
+		case TOKEN_IS: emitByte(parser, compiler, OP_IS); break;
+		case TOKEN_IN: emitByte(parser, compiler, OP_IN); break;
+		case TOKEN_IMPLEMENTS: emitByte(parser, compiler, OP_IMPLEMENTS); break;
 		default:
 			return; // Unreachable.
 	}
@@ -361,16 +364,6 @@ static void grouping(Parser* parser, Compiler* compiler, bool canAssign) {
 
 static void expression(Parser* parser, Compiler* compiler) {
 	parsePrecedence(parser, compiler, PREC_ASSIGNMENT);
-}
-
-static void is(Parser* parser, Compiler* compiler, bool canAssign) {
-	expression(parser, compiler);
-	emitByte(parser, compiler, OP_IS);
-}
-
-static void in(Parser* parser, Compiler* compiler, bool canAssign) {
-	expression(parser, compiler);
-	emitByte(parser, compiler, OP_IN);
 }
 
 static void range(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -1434,12 +1427,15 @@ ParseRule rules[] = {
   [TOKEN_CONTINUE] = {NULL, NULL, PREC_NONE},
   [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
   [TOKEN_EXTENDS] = {NULL, NULL, PREC_NONE},
+  [TOKEN_EXPORT] = {NULL, NULL, PREC_NONE},
   [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
   [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
   [TOKEN_IF] = {NULL, NULL, PREC_NONE},
-  [TOKEN_IS] = {NULL, is, PREC_EQUALITY},
-  [TOKEN_IN] = {NULL, in, PREC_COMPARISON},
+  [TOKEN_IS] = {NULL, binary, PREC_EQUALITY},
+  [TOKEN_IN] = {NULL, binary, PREC_COMPARISON},
+  [TOKEN_IMPORT] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IMPLEMENTS] = {NULL, binary, PREC_COMPARISON},
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},
