@@ -1127,8 +1127,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_RUNTIME_ERR;
 				}
 				if (!IS_INSTANCE(a)) {
-					runtimeError(vm, "Left hand operand of an implements clause must be an instance.");
-					return STATUS_RUNTIME_ERR;
+					push(vm, BOOL_VAL(false));
+					break;
 				}
 
 				ObjClass* class = AS_CLASS(b);
