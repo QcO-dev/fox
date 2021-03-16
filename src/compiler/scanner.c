@@ -208,6 +208,10 @@ static Token identifier(Scanner* scanner) {
 	return makeToken(scanner, identifierType(scanner));
 }
 
+static TokenType inplace(Scanner* scanner, TokenType normal, TokenType inplace) {
+	return match(scanner, '=') ? inplace : normal;
+}
+
 Token scanToken(Scanner* scanner) {
 
 	skipWhitespace(scanner);
@@ -230,12 +234,12 @@ Token scanToken(Scanner* scanner) {
 		case ';': return makeToken(scanner, TOKEN_SEMICOLON);
 		case ':': return makeToken(scanner, TOKEN_COLON);
 		case ',': return makeToken(scanner, TOKEN_COMMA);
-		case '-': return makeToken(scanner, TOKEN_MINUS);
-		case '+': return makeToken(scanner, TOKEN_PLUS);
-		case '/': return makeToken(scanner, TOKEN_SLASH);
-		case '*': return makeToken(scanner, TOKEN_STAR);
+		case '-': return makeToken(scanner, inplace(scanner, TOKEN_MINUS, TOKEN_IN_MINUS));
+		case '+': return makeToken(scanner, inplace(scanner, TOKEN_PLUS, TOKEN_IN_PLUS));
+		case '/': return makeToken(scanner, inplace(scanner, TOKEN_SLASH, TOKEN_IN_SLASH));
+		case '*': return makeToken(scanner, inplace(scanner, TOKEN_STAR, TOKEN_IN_STAR));
 		case '~': return makeToken(scanner, TOKEN_BIT_NOT);
-		case '^': return makeToken(scanner, TOKEN_XOR);
+		case '^': return makeToken(scanner, inplace(scanner, TOKEN_XOR, TOKEN_IN_XOR));
 		case '?': return makeToken(scanner, TOKEN_QUESTION);
 
 		case '.': return makeToken(scanner,
@@ -251,7 +255,7 @@ Token scanToken(Scanner* scanner) {
 			TokenType type = TOKEN_LESS;
 
 			if (match(scanner, '<')) {
-				type = TOKEN_LSH;
+				type = inplace(scanner, TOKEN_LSH, TOKEN_IN_LSH);
 			}
 			else if (match(scanner, '=')) {
 				type = TOKEN_LESS_EQUAL;
@@ -265,7 +269,10 @@ Token scanToken(Scanner* scanner) {
 			if (match(scanner, '>')) {
 				type = TOKEN_RSH;
 				if (match(scanner, '>')) {
-					type = TOKEN_ASH;
+					type = inplace(scanner, TOKEN_ASH, TOKEN_IN_ASH);
+				}
+				else if (match(scanner, '=')) {
+					type = TOKEN_IN_RSH;
 				}
 			}
 			else if (match(scanner, '=')) {
@@ -276,10 +283,10 @@ Token scanToken(Scanner* scanner) {
 		}
 		case '&':
 			return makeToken(scanner,
-				match(scanner, '&') ? TOKEN_AND : TOKEN_BIT_AND);
+				match(scanner, '&') ? TOKEN_AND : inplace(scanner, TOKEN_BIT_AND, TOKEN_IN_BIT_AND));
 		case '|':
 			return makeToken(scanner,
-				match(scanner, '|') ? TOKEN_OR : TOKEN_BIT_OR);
+				match(scanner, '|') ? TOKEN_OR : inplace(scanner, TOKEN_BIT_OR, TOKEN_IN_BIT_OR));
 
 		case '"': return string(scanner);
 	}

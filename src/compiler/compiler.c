@@ -109,6 +109,8 @@ static uint8_t parseVariable(Parser* parser, Compiler* compiler, const char* err
 static uint8_t argumentList(Parser* parser, Compiler* compiler);
 static void variable(Parser* parser, Compiler* compiler, bool canAssign);
 static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign);
+static void and(Parser* parser, Compiler* compiler, bool canAssign);
+static void or(Parser * parser, Compiler * compiler, bool canAssign);
 
 static Chunk* currentChunk(Compiler* compiler) {
 	return &compiler->function->chunk;
@@ -278,6 +280,41 @@ static void emitConstant(Parser* parser, Compiler* compiler, Value value) {
 	emitByte(parser, compiler, makeConstant(parser, compiler, value));
 }
 
+static bool isAssignment(Parser* parser) {
+	switch (parser->current.type) {
+		case TOKEN_IN_PLUS:
+		case TOKEN_IN_MINUS:
+		case TOKEN_IN_SLASH:
+		case TOKEN_IN_STAR:
+		case TOKEN_IN_ASH:
+		case TOKEN_IN_RSH:
+		case TOKEN_IN_LSH:
+		case TOKEN_IN_BIT_AND:
+		case TOKEN_IN_BIT_OR:
+		case TOKEN_IN_XOR:
+			advance(parser);
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+static void inplaceOperator(Parser* parser, Compiler* compiler, TokenType type) {
+	switch (type) {
+		case TOKEN_IN_PLUS: emitByte(parser, compiler, OP_ADD); break;
+		case TOKEN_IN_MINUS: emitByte(parser, compiler, OP_SUB); break;
+		case TOKEN_IN_SLASH: emitByte(parser, compiler, OP_DIV); break;
+		case TOKEN_IN_STAR: emitByte(parser, compiler, OP_MUL); break;
+		case TOKEN_IN_ASH: emitByte(parser, compiler, OP_ASH); break;
+		case TOKEN_IN_RSH: emitByte(parser, compiler, OP_RSH); break;
+		case TOKEN_IN_LSH: emitByte(parser, compiler, OP_LSH); break;
+		case TOKEN_IN_BIT_AND: emitByte(parser, compiler, OP_BITWISE_AND); break;
+		case TOKEN_IN_BIT_OR: emitByte(parser, compiler, OP_BITWISE_OR); break;
+		case TOKEN_IN_XOR: emitByte(parser, compiler, OP_XOR); break;
+	}
+}
+
 static void parsePrecedence(Parser* parser, Compiler* compiler, Precedence precedence) {
 	advance(parser);
 	ParseFn prefixRule = getRule(parser->previous.type)->prefix;
@@ -295,7 +332,7 @@ static void parsePrecedence(Parser* parser, Compiler* compiler, Precedence prece
 		infixRule(parser, compiler, canAssign);
 	}
 
-	if (canAssign && match(parser, TOKEN_EQUAL)) {
+	if (canAssign && (match(parser, TOKEN_EQUAL) || isAssignment(parser))) {
 		error(parser, "Invalid assignment target.");
 	}
 
@@ -624,6 +661,20 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 		emitByte(parser, compiler, OP_SET_PROPERTY);
 		emitByte(parser, compiler, name);
 	}
+	else if (canAssign && isAssignment(parser)) {
+		TokenType type = parser->previous.type;
+
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, OP_GET_PROPERTY);
+		emitByte(parser, compiler, name);
+
+		expression(parser, compiler);
+		inplaceOperator(parser, compiler, type);
+
+		emitByte(parser, compiler, OP_SET_PROPERTY);
+		emitByte(parser, compiler, name);
+	}
 	else if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t argCount = argumentList(parser, compiler);
 		emitByte(parser, compiler, OP_INVOKE);
@@ -704,6 +755,20 @@ static void index(Parser* parser, Compiler* compiler, bool canAssign) {
 	consume(parser, TOKEN_RIGHT_SQBR, "Expected ']' after index.");
 	if (canAssign && match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
+		emitByte(parser, compiler, OP_SET_INDEX);
+	}
+	else if (canAssign && isAssignment(parser)) {
+		TokenType type = parser->previous.type;
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_GET_INDEX);
+
+		expression(parser, compiler);
+		inplaceOperator(parser, compiler, type);
 		emitByte(parser, compiler, OP_SET_INDEX);
 	}
 	else {
@@ -800,6 +865,16 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 
 	if (canAssign && match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
+		emitByte(parser, compiler, setOp);
+	}
+	else if (canAssign && isAssignment(parser)) {
+		TokenType type = parser->previous.type;
+		emitByte(parser, compiler, getOp);
+		emitByte(parser, compiler, arg);
+
+		expression(parser, compiler);
+		inplaceOperator(parser, compiler, type);
+
 		emitByte(parser, compiler, setOp);
 	}
 	else {
