@@ -290,9 +290,7 @@ static bool isAssignment(Parser* parser) {
 		case TOKEN_IN_RSH:
 		case TOKEN_IN_LSH:
 		case TOKEN_IN_BIT_AND:
-		case TOKEN_IN_AND:
 		case TOKEN_IN_BIT_OR:
-		case TOKEN_IN_OR:
 		case TOKEN_IN_XOR:
 			advance(parser);
 			return true;
@@ -663,6 +661,20 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 		emitByte(parser, compiler, OP_SET_PROPERTY);
 		emitByte(parser, compiler, name);
 	}
+	else if (canAssign && isAssignment(parser)) {
+		TokenType type = parser->previous.type;
+
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, OP_GET_PROPERTY);
+		emitByte(parser, compiler, name);
+
+		expression(parser, compiler);
+		inplaceOperator(parser, compiler, type);
+
+		emitByte(parser, compiler, OP_SET_PROPERTY);
+		emitByte(parser, compiler, name);
+	}
 	else if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t argCount = argumentList(parser, compiler);
 		emitByte(parser, compiler, OP_INVOKE);
@@ -743,6 +755,20 @@ static void index(Parser* parser, Compiler* compiler, bool canAssign) {
 	consume(parser, TOKEN_RIGHT_SQBR, "Expected ']' after index.");
 	if (canAssign && match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
+		emitByte(parser, compiler, OP_SET_INDEX);
+	}
+	else if (canAssign && isAssignment(parser)) {
+		TokenType type = parser->previous.type;
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_GET_INDEX);
+
+		expression(parser, compiler);
+		inplaceOperator(parser, compiler, type);
 		emitByte(parser, compiler, OP_SET_INDEX);
 	}
 	else {
@@ -850,7 +876,6 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 		inplaceOperator(parser, compiler, type);
 
 		emitByte(parser, compiler, setOp);
-		emitByte(parser, compiler, arg);
 	}
 	else {
 		emitByte(parser, compiler, getOp);

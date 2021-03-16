@@ -441,6 +441,12 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_DUP: push(vm, peek(vm, 0)); break;
 
+			case OP_DUP_OFFSET: {
+				uint8_t offset = READ_BYTE();
+				push(vm, peek(vm, offset)); 
+				break; 
+			}
+
 			case OP_NULL: push(vm, NULL_VAL); break;
 			case OP_TRUE: push(vm, BOOL_VAL(true)); break;
 			case OP_FALSE: push(vm, BOOL_VAL(false)); break;

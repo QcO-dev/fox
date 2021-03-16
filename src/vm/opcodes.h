@@ -2,6 +2,7 @@
 typedef enum {
 	OP_CONSTANT, // OP_CONSTANT_W
 	OP_DUP,
+	OP_DUP_OFFSET,
 	OP_NULL,
 	OP_TRUE,
 	OP_FALSE,
