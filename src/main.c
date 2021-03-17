@@ -9,6 +9,14 @@
 #include <signal.h>
 #include <core/file.h>
 
+#if defined(_WIN32) || defined(_WIN64) || defined(WINDOWS)
+#include <direct.h>
+#define getCurrentDir _getcwd
+#else
+#include <unistd.h>
+#define getCurrentDir getcwd
+#endif
+
 // The below variable and function allows the user to exit with Ctrl-C
 static volatile sig_atomic_t replKeepRunning = 1;
 
@@ -51,21 +59,40 @@ static void runFile(const char* path) {
 		}
 	}
 
-	int index = fromLastInstance(slashRoot, "/") - slashRoot;
+	char* lastInstance = fromLastInstance(slashRoot, "/");
 
-	char* base = malloc(index + 2);
-	memcpy(base, slashRoot, index);
-	base[index] = '/';
-	base[index + 1] = '\0';
+	char* base;
+	char* name;
+
+	if (lastInstance != NULL) {
+		int index = lastInstance - slashRoot;
+
+		base = malloc(index + 2);
+		memcpy(base, slashRoot, index);
+		base[index] = '/';
+		base[index + 1] = '\0';
+
+		name = malloc(strlen(lastInstance));
+		strcpy(name, lastInstance + 1);
+	}
+	else {
+		char buffer[FILENAME_MAX];
+		getCurrentDir(buffer, FILENAME_MAX);
+
+		base = malloc(strlen(buffer) + 2);
+		strcpy(base, buffer);
+		base[strlen(buffer)] = '/';
+		base[strlen(buffer) + 1] = '\0';
+
+		name = malloc(strlen(slashRoot) + 1);
+		strcpy(name, slashRoot);
+	}
 
 	char* source = readFile(path);
 	if (source == NULL) {
 		fprintf(stderr, "\n");
-		exit(-4); 
+		exit(-4);
 	}
-
-	char* name = malloc(strlen(fromLastInstance(slashRoot, "/")));
-	strcpy(name, fromLastInstance(slashRoot, "/") + 1);
 
 	InterpreterResult result = interpret(base, name, source);
 	free(source);
