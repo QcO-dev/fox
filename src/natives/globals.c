@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void defineNative(VM* vm, Table* table, const char* name, NativeFn function, size_t arity) {
+void defineNative(VM* vm, Table* table, const char* name, NativeFn function, size_t arity, bool varArgs) {
 	push(vm, OBJ_VAL(copyString(vm, name, (int)strlen(name))));
-	push(vm, OBJ_VAL(newNative(vm, function, arity)));
+	push(vm, OBJ_VAL(newNative(vm, function, arity, varArgs)));
 	tableSet(vm, table, AS_STRING(vm->stack[0]), vm->stack[1]);
 	pop(vm);
 	pop(vm);
@@ -30,6 +30,13 @@ static Value sqrtNative(VM* vm, size_t argCount, Value* args, Value* bound, bool
 }
 
 static Value inputNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
+	for (size_t i = 0; i < argCount; i++) {
+		char* rep = valueToString(vm, args[i]);
+		printf("%s", rep);
+		free(rep);
+		if (i != argCount - 1) printf(" ");
+	}
+
 	char* input = inputString(stdin, 20);
 	return OBJ_VAL(takeString(vm, input, strlen(input)));
 }
@@ -50,16 +57,21 @@ static Value readNative(VM* vm, size_t argCount, Value* args, Value* bound, bool
 }
 
 static Value printNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
-	char* rep = valueToString(vm, args[0]);
-	printf("%s\n", rep);
-	free(rep);
+	for (size_t i = 0; i < argCount; i++) {
+		char* rep = valueToString(vm, args[i]);
+		printf("%s", rep);
+		free(rep);
+		if (i != argCount - 1) printf(" ");
+	}
+	printf("\n");
+
 	return NULL_VAL;
 }
 
 void defineGlobalVariables(VM* vm) {
-	defineNative(vm, &vm->globals, "clock", clockNative, 0);
-	defineNative(vm, &vm->globals, "sqrt", sqrtNative, 1);
-	defineNative(vm, &vm->globals, "input", inputNative, 0);
-	defineNative(vm, &vm->globals, "read", readNative, 1);
-	defineNative(vm, &vm->globals, "print", printNative, 1);
+	defineNative(vm, &vm->globals, "clock", clockNative, 0, false);
+	defineNative(vm, &vm->globals, "sqrt", sqrtNative, 1, false);
+	defineNative(vm, &vm->globals, "input", inputNative, 0, true);
+	defineNative(vm, &vm->globals, "read", readNative, 1, false);
+	defineNative(vm, &vm->globals, "print", printNative, 0, true);
 }

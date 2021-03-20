@@ -6,5 +6,5 @@ Value stringLengthNative(VM* vm, size_t argCount, Value* args, Value* bound, boo
 }
 
 void defineStringMethods(VM* vm) {
-	defineNative(vm, &vm->stringMethods, "length", stringLengthNative, 0);
+	defineNative(vm, &vm->stringMethods, "length", stringLengthNative, 0, false);
 }

@@ -73,12 +73,13 @@ typedef Value(*NativeFn)(VM* vm, size_t argCount, Value* args, Value* bound, boo
 typedef struct {
 	Obj obj;
 	size_t arity;
+	bool varArgs;
 	NativeFn function;
 	Value bound;
 	bool isBound;
 } ObjNative;
 
-ObjNative* newNative(VM* vm, NativeFn function, size_t arity);
+ObjNative* newNative(VM* vm, NativeFn function, size_t arity, bool varArgs);
 
 typedef struct ObjUpvalue {
 	Obj obj;

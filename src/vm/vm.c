@@ -265,8 +265,10 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 			case OBJ_NATIVE: {
 				ObjNative* obj = AS_NATIVE_OBJ(callee);
 				if (argCount != obj->arity) {
-					runtimeError(vm, "Expected %d arguments but got %d.", obj->arity, argCount);
-					return false;
+					if (!(obj->varArgs && argCount > obj->arity)) {
+						runtimeError(vm, "Expected %d arguments but got %d.", obj->arity, argCount);
+						return false;
+					}
 				}
 
 				NativeFn native = AS_NATIVE(callee);
