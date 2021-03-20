@@ -127,6 +127,7 @@ static void initCompiler(Compiler* compiler, Compiler* oldCompiler, VM* vm, Pars
 	compiler->isLoop = false;
 	compiler->function = newFunction(vm);
 	compiler->function->lambda = false;
+	compiler->function->varArgs = false;
 
 	if (type != TYPE_SCRIPT) {
 		compiler->function->name = copyString(vm, parser->previous.start, parser->previous.length);
@@ -1208,8 +1209,13 @@ static void function(Parser* parser, Compiler* c, FunctionType type) {
 	// Compile the parameter list.
 	consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after function name.");
 
+	bool varArgs = false;
+
 	if (parser->current.type != TOKEN_RIGHT_PAREN) {
 		do {
+			if (varArgs) {
+				error(parser, "Variable Arguments must be the last argument in a function definition.");
+			}
 			compiler.function->arity++;
 			if (compiler.function->arity > 255) {
 				error(parser, "Can't have more than 255 parameters.");
@@ -1217,9 +1223,10 @@ static void function(Parser* parser, Compiler* c, FunctionType type) {
 
 			uint8_t paramConstant = parseVariable(parser, &compiler, "Expect parameter name.");
 			defineVariable(parser, &compiler, paramConstant);
+			if (match(parser, TOKEN_ELLIPSIS)) varArgs = true;
 		} while (match(parser, TOKEN_COMMA));
 	}
-
+	compiler.function->varArgs = varArgs;
 	consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
 
 	// The body.

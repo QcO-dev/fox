@@ -157,22 +157,56 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 
 	size_t expected = closure->function->arity;
 
-	if (argCount != expected) {
-		if (closure->function->lambda) { // From the users pov, lambdas do not arity check
-			if (argCount < expected) {
-				for (size_t i = argCount; i < expected; i++) {
+	if (closure->function->varArgs) {
+		size_t needed = expected - 1; // The arity minus the variable arguments.
+		if (argCount < needed) {
+			if (closure->function->lambda) {
+				for (int i = argCount; i < needed; i++) {
 					push(vm, NULL_VAL);
 				}
 			}
 			else {
-				for (size_t i = argCount; i > expected; i--) {
-					pop(vm);
-				}
+				runtimeError(vm, "Expected %d or more arguments but got %d.", needed, argCount);
+				return false;
 			}
 		}
-		else {
-			runtimeError(vm, "Expected %d arguments but got %d.", closure->function->arity, argCount);
-			return false;
+
+		size_t varArgCount = argCount - needed;
+
+		ValueArray varArgs;
+		initValueArray(&varArgs);
+
+		// 2 loops are used to prevent the GC from cleaning items which are still needed.
+		for (size_t i = varArgCount; i >= needed; i--) {
+			writeValueArray(vm, &varArgs, peek(vm, i - 1));
+		}
+		for (size_t i = varArgCount; i >= needed; i--) {
+			pop(vm);
+		}
+
+		ObjList* list = newList(vm, varArgs);
+
+		push(vm, OBJ_VAL(list));
+
+	}
+	else {
+		if (argCount != expected) {
+			if (closure->function->lambda) { // From the users pov, lambdas do not arity check
+				if (argCount < expected) {
+					for (size_t i = argCount; i < expected; i++) {
+						push(vm, NULL_VAL);
+					}
+				}
+				else {
+					for (size_t i = argCount; i > expected; i--) {
+						pop(vm);
+					}
+				}
+			}
+			else {
+				runtimeError(vm, "Expected %d arguments but got %d.", closure->function->arity, argCount);
+				return false;
+			}
 		}
 	}
 

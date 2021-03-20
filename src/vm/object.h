@@ -61,6 +61,7 @@ typedef struct {
 	size_t arity;
 	size_t upvalueCount;
 	bool lambda;
+	bool varArgs;
 	Chunk chunk;
 	ObjString* name;
 } ObjFunction;
