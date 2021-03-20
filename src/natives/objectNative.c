@@ -47,7 +47,7 @@ Value objectHasPropNative(VM* vm, size_t argCount, Value* args, Value* bound, bo
 }
 
 void defineObjectMethods(VM* vm, ObjClass* klass) {
-	defineNative(vm, &klass->methods, "keys", objectKeysNative, 0);
-	defineNative(vm, &klass->methods, "values", objectValuesNative, 0);
-	defineNative(vm, &klass->methods, "hasProp", objectHasPropNative, 1);
+	defineNative(vm, &klass->methods, "keys", objectKeysNative, 0, false);
+	defineNative(vm, &klass->methods, "values", objectValuesNative, 0, false);
+	defineNative(vm, &klass->methods, "hasProp", objectHasPropNative, 1, false);
 }

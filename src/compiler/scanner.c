@@ -243,7 +243,9 @@ Token scanToken(Scanner* scanner) {
 		case '?': return makeToken(scanner, TOKEN_QUESTION);
 
 		case '.': return makeToken(scanner,
-			match(scanner, '.') ? TOKEN_D_ELLIPSIS : TOKEN_DOT);
+			match(scanner, '.') ? match(scanner, '.') ? TOKEN_ELLIPSIS
+			: TOKEN_D_ELLIPSIS
+			: TOKEN_DOT);
 
 		case '!':
 			return makeToken(scanner,

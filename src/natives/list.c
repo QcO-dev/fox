@@ -13,6 +13,6 @@ Value listAppendNative(VM* vm, size_t argCount, Value* args, Value* bound, bool*
 }
 
 void defineListMethods(VM* vm) {
-	defineNative(vm, &vm->listMethods, "length", listLengthNative, 0);
-	defineNative(vm, &vm->listMethods, "append", listAppendNative, 1);
+	defineNative(vm, &vm->listMethods, "length", listLengthNative, 0, false);
+	defineNative(vm, &vm->listMethods, "append", listAppendNative, 1, false);
 }
