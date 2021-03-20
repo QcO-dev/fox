@@ -567,8 +567,13 @@ static void lambda(Parser* parser, Compiler* c, bool canAssign) {
 	compiler.function->name = copyString(parser->vm, "<lambda>", 8);
 	compiler.function->lambda = true;
 
+	bool varArgs = false;
+
 	if (parser->current.type != TOKEN_BIT_OR) {
 		do {
+			if (varArgs) {
+				error(parser, "Variable Arguments must be the last argument in a function definition.");
+			}
 			compiler.function->arity++;
 			if (compiler.function->arity > 255) {
 				error(parser, "Can't have more than 255 parameters.");
@@ -576,8 +581,11 @@ static void lambda(Parser* parser, Compiler* c, bool canAssign) {
 
 			uint8_t paramConstant = parseVariable(parser, &compiler, "Expected parameter name.");
 			defineVariable(parser, &compiler, paramConstant);
+			if (match(parser, TOKEN_ELLIPSIS)) varArgs = true;
 		} while (match(parser, TOKEN_COMMA));
 	}
+
+	compiler.function->varArgs = varArgs;
 
 	consume(parser, TOKEN_BIT_OR, "Expected '|' after parameters.");
 

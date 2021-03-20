@@ -161,7 +161,7 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 		size_t needed = expected - 1; // The arity minus the variable arguments.
 		if (argCount < needed) {
 			if (closure->function->lambda) {
-				for (int i = argCount; i < needed; i++) {
+				for (size_t i = argCount; i < needed; i++) {
 					push(vm, NULL_VAL);
 				}
 			}
@@ -177,11 +177,21 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 		initValueArray(&varArgs);
 
 		// 2 loops are used to prevent the GC from cleaning items which are still needed.
-		for (size_t i = varArgCount; i >= needed; i--) {
-			writeValueArray(vm, &varArgs, peek(vm, i - 1));
+		if (needed == 0) {
+			for (size_t i = varArgCount; i > needed; i--) {
+				writeValueArray(vm, &varArgs, peek(vm, i - 1));
+			}
+			for (size_t i = varArgCount; i > needed; i--) {
+				pop(vm);
+			}
 		}
-		for (size_t i = varArgCount; i >= needed; i--) {
-			pop(vm);
+		else {
+			for (size_t i = varArgCount; i >= needed; i--) {
+				writeValueArray(vm, &varArgs, peek(vm, i - 1));
+			}
+			for (size_t i = varArgCount; i >= needed; i--) {
+				pop(vm);
+			}
 		}
 
 		ObjList* list = newList(vm, varArgs);
