@@ -1019,6 +1019,78 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 	compiler->continuePoint = prevContinuePoint;
 }
 
+static void foreachStatement(Parser* parser, Compiler* compiler) {
+
+	beginScope(compiler);
+
+	consume(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'foreach'.");
+
+	consume(parser, TOKEN_VAR, "Expected 'var' in foreach clause.");
+
+	uint8_t global = parseVariable(parser, compiler, "Expect variable name.");
+
+	defineVariable(parser, compiler, global);
+
+	Token item = parser->previous;
+
+	emitByte(parser, compiler, OP_NULL);
+
+	emitByte(parser, compiler, OP_SET_LOCAL);
+	emitByte(parser, compiler, resolveLocal(parser, compiler, &item));
+
+	consume(parser, TOKEN_IN, "Expected 'in' after variable in foreach clause.");
+
+	expression(parser, compiler);
+
+	consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after foreach clause.");
+
+	Token iteratorToken = syntheticToken("iterator");
+
+	uint8_t iterator = identifierConstant(parser, compiler, &iteratorToken);
+
+	emitByte(parser, compiler, OP_INVOKE);
+	emitByte(parser, compiler, iterator);
+	emitByte(parser, compiler, 0);
+
+	int loopStart = currentChunk(compiler)->count;
+
+	emitByte(parser, compiler, OP_DUP);
+
+	Token doneToken = syntheticToken("done");
+
+	uint8_t done = identifierConstant(parser, compiler, &doneToken);
+
+	emitByte(parser, compiler, OP_INVOKE);
+	emitByte(parser, compiler, done);
+	emitByte(parser, compiler, 0);
+
+	emitByte(parser, compiler, OP_NOT);
+	int exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+
+	emitByte(parser, compiler, OP_DUP);
+
+	Token nextToken = syntheticToken("next");
+
+	uint8_t next = identifierConstant(parser, compiler, &nextToken);
+
+	emitByte(parser, compiler, OP_INVOKE);
+	emitByte(parser, compiler, next);
+	emitByte(parser, compiler, 0);
+
+	emitByte(parser, compiler, OP_SET_LOCAL);
+	emitByte(parser, compiler, resolveLocal(parser, compiler, &item));
+
+	emitByte(parser, compiler, OP_POP);
+
+	statement(parser, compiler);
+
+	emitLoop(parser, compiler, loopStart);
+
+	patchJump(parser, compiler, exitJump);
+
+	endScope(parser, compiler);
+}
+
 static void returnStatement(Parser* parser, Compiler* compiler) {
 
 	if (compiler->type == TYPE_SCRIPT) {
@@ -1076,6 +1148,9 @@ static void statement(Parser* parser, Compiler* compiler) {
 	}
 	else if (match(parser, TOKEN_FOR)) {
 		forStatement(parser, compiler);
+	}
+	else if (match(parser, TOKEN_FOREACH)) {
+		foreachStatement(parser, compiler);
 	}
 	else if (match(parser, TOKEN_RETURN)) {
 		returnStatement(parser, compiler);
@@ -1520,6 +1595,7 @@ ParseRule rules[] = {
   [TOKEN_EXPORT] = {NULL, NULL, PREC_NONE},
   [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
   [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
+  [TOKEN_FOREACH] = {NULL, NULL, PREC_NONE},
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
   [TOKEN_IF] = {NULL, NULL, PREC_NONE},
   [TOKEN_IS] = {NULL, binary, PREC_EQUALITY},
