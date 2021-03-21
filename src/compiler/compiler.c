@@ -1021,7 +1021,13 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 
 static void foreachStatement(Parser* parser, Compiler* compiler) {
 
+	bool wasLoop = compiler->isLoop;
+	int prevBreakPoint = compiler->breakPoint;
+	int prevContinuePoint = compiler->continuePoint;
+
 	beginScope(compiler);
+
+	compiler->isLoop = true;
 
 	consume(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'foreach'.");
 
@@ -1053,6 +1059,7 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 	emitByte(parser, compiler, 0);
 
 	int loopStart = currentChunk(compiler)->count;
+	compiler->continuePoint = loopStart;
 
 	emitByte(parser, compiler, OP_DUP);
 
@@ -1066,6 +1073,7 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 
 	emitByte(parser, compiler, OP_NOT);
 	int exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	compiler->breakPoint = exitJump;
 
 	emitByte(parser, compiler, OP_DUP);
 
@@ -1089,6 +1097,11 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 	patchJump(parser, compiler, exitJump);
 
 	endScope(parser, compiler);
+
+	compiler->isLoop = wasLoop;
+	compiler->breakPoint = prevBreakPoint;
+	compiler->continuePoint = prevContinuePoint;
+
 }
 
 static void returnStatement(Parser* parser, Compiler* compiler) {
