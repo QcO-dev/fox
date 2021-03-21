@@ -36,6 +36,7 @@ struct VM {
 	Table listMethods;
 	ObjClass* objectClass;
 	ObjClass* importClass;
+	ObjClass* iteratorClass;
 	ObjUpvalue* openUpvalues;
 	size_t grayCount;
 	size_t grayCapacity;

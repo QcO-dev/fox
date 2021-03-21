@@ -21,7 +21,7 @@ static Value clockNative(VM* vm, size_t argCount, Value* args, Value* bound, boo
 
 static Value sqrtNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	if (!IS_NUMBER(args[0])) {
-		runtimeError(vm, "Expected first parameter to be a number.\nin sqrt");
+		runtimeError(vm, "Expected first parameter to be a number.");
 		*hasError = true;
 		return NULL_VAL;
 	}
@@ -43,13 +43,13 @@ static Value inputNative(VM* vm, size_t argCount, Value* args, Value* bound, boo
 
 static Value readNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	if (!IS_STRING(args[0])) {
-		runtimeError(vm, "Expected first parameter to be a string.\nin read");
+		runtimeError(vm, "Expected first parameter to be a string.");
 		*hasError = true;
 		return NULL_VAL;
 	}
 	char* contents = readFile(AS_CSTRING(args[0]));
 	if (contents == NULL) {
-		runtimeError(vm, "Could not open file '%s'\nin read", AS_CSTRING(args[0]));
+		runtimeError(vm, "Could not open file '%s'", AS_CSTRING(args[0]));
 		*hasError = true;
 		return NULL_VAL;
 	}

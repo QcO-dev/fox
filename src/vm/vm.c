@@ -11,6 +11,7 @@
 #include <natives/list.h>
 #include <natives/string.h>
 #include <natives/objectNative.h>
+#include <natives/iterator.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -52,7 +53,12 @@ void initVM(VM* vm) {
 	vm->importClass = importClass;
 	defineObjectMethods(vm, vm->importClass);
 
+	ObjClass* iteratorClass = newClass(vm, copyString(vm, "<iterator>", 10));
+	vm->iteratorClass = iteratorClass;
+	defineIteratorMethods(vm, vm->iteratorClass);
+
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
+	tableSet(vm, &vm->globals, copyString(vm, "Iterator", 8), OBJ_VAL(vm->iteratorClass));
 
 	defineGlobalVariables(vm);
 	defineListMethods(vm);
@@ -239,10 +245,19 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 
 			case OBJ_CLASS: {
 				ObjClass* klass = AS_CLASS(callee);
-				vm->stackTop[-((int)argCount) - 1] = OBJ_VAL(newInstance(vm, klass));
+				Value instance = OBJ_VAL(newInstance(vm, klass));
+				vm->stackTop[-((int)argCount) - 1] = instance;
 
 				Value initalizer;
 				if (tableGet(&klass->methods, klass->name, &initalizer)) {
+					// Handle classes with initalizers which are native (such as <iterator>)
+					if (IS_NATIVE(initalizer)) {
+						ObjNative* native = AS_NATIVE_OBJ(initalizer);
+						native->isBound = true;
+						native->bound = instance;
+						return callValue(vm, OBJ_VAL(native), argCount);
+					}
+
 					return call(vm, AS_CLOSURE(initalizer), argCount);
 				}
 				else if (argCount != 0) {
@@ -410,7 +425,6 @@ bool invoke(VM* vm, ObjString* name, int argCount) {
 }
 
 InterpreterResult execute(VM* vm, Chunk* chunk) {
-	//CallFrame* frame = &vm->frames[vm->frameCount - 1];
 	vm->frame = &vm->frames[vm->frameCount - 1];
 
 
@@ -418,7 +432,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 #define READ_SHORT() (vm->frame->ip += 2, (uint16_t)((vm->frame->ip[-2] << 8) | vm->frame->ip[-1]))
 #define READ_CONSTANT() (vm->frame->closure->function->chunk.constants.values[READ_BYTE()])
 #define READ_STRING() (AS_STRING(READ_CONSTANT()))
-	//TODO INST
+	
 #define BINARY_OP(vm, valueType, op) \
 	do { \
 		if (IS_INSTANCE(peek(vm, 1))) { \
@@ -510,7 +524,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Operand must be a number."); //TODO
+					runtimeError(vm, "Operand must be a number.");
 					return STATUS_RUNTIME_ERR;
 				}
 
@@ -529,7 +543,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Operand must be a number."); //TODO
+					runtimeError(vm, "Operand must be a number.");
 					return STATUS_RUNTIME_ERR;
 				}
 
