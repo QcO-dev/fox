@@ -507,6 +507,14 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break; 
 			}
 
+			case OP_SWAP: {
+				Value a = pop(vm);
+				Value b = pop(vm);
+				push(vm, a);
+				push(vm, b);
+				break;
+			}
+
 			case OP_NULL: push(vm, NULL_VAL); break;
 			case OP_TRUE: push(vm, BOOL_VAL(true)); break;
 			case OP_FALSE: push(vm, BOOL_VAL(false)); break;

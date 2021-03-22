@@ -87,6 +87,7 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 		case OP_RETURN: return simpleInstruction("RETURN", offset);
 		case OP_DUP: return simpleInstruction("DUP", offset);
 		case OP_DUP_OFFSET: return byteInstruction("DUP_OFFSET", offset, chunk);
+		case OP_SWAP: return simpleInstruction("SWAP", offset);
 		case OP_NEGATE: return simpleInstruction("NEGATE", offset);
 		case OP_NOT: return simpleInstruction("NOT", offset);
 		case OP_BITWISE_NOT: return simpleInstruction("BITWISE_NOT", offset);
