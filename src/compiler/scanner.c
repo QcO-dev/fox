@@ -292,9 +292,23 @@ Token scanToken(Scanner* scanner) {
 		case '&':
 			return makeToken(scanner,
 				match(scanner, '&') ? TOKEN_AND : inplace(scanner, TOKEN_BIT_AND, TOKEN_IN_BIT_AND));
-		case '|':
-			return makeToken(scanner,
-				match(scanner, '|') ? TOKEN_OR : inplace(scanner, TOKEN_BIT_OR, TOKEN_IN_BIT_OR));
+		case '|': {
+			TokenType type = TOKEN_BIT_OR;
+
+			if (match(scanner, '|')) {
+				type = TOKEN_OR;
+			}
+
+			else if (match(scanner, '>')) {
+				type = TOKEN_PIPE;
+			}
+
+			else {
+				type = inplace(scanner, TOKEN_BIT_OR, TOKEN_IN_BIT_OR);
+			}
+
+			return makeToken(scanner, type);
+		}
 
 		case '"': return string(scanner);
 	}

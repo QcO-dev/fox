@@ -67,6 +67,7 @@ typedef void (*ParseFn)(Parser* parser, Compiler* compiler, bool canAssign);
 typedef enum {
 	PREC_NONE,
 	PREC_ASSIGNMENT,  // =
+	PREC_PIPE,        // x |> y
 	PREC_TERNARY,     // x ? y : z
 	PREC_OR,          // ||
 	PREC_AND,         // &&
@@ -80,7 +81,7 @@ typedef enum {
 	PREC_FACTOR,      // * /
 	PREC_RANGE,       // x..y
 	PREC_UNARY,       // ! - typeof
-	PREC_CALL,        // . () []
+	PREC_CALL,        // . () [] |>
 	PREC_PRIMARY      // x {}
 } Precedence;
 
@@ -708,6 +709,15 @@ static void ternary(Parser* parser, Compiler* compiler, bool canAssign) {
 		emitByte(parser, compiler, OP_NULL);
 	}
 	patchJump(parser, compiler, trueJump);
+}
+
+static void pipe(Parser* parser, Compiler* compiler, bool canAssign) {
+	// The compiler will stop this route at another |>
+	// This lets it add the below instructions for each one.
+	parsePrecedence(parser, compiler, PREC_TERNARY);
+	emitByte(parser, compiler, OP_SWAP);
+	emitByte(parser, compiler, OP_CALL);
+	emitByte(parser, compiler, 1);
 }
 
 static void super(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -1600,6 +1610,7 @@ ParseRule rules[] = {
   [TOKEN_RSH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_ASH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_QUESTION] = {NULL, ternary, PREC_TERNARY},
+  [TOKEN_PIPE] = {NULL, pipe, PREC_PIPE},
   [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
   [TOKEN_CONTINUE] = {NULL, NULL, PREC_NONE},
