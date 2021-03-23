@@ -40,7 +40,7 @@ static char peekNext(Scanner* scanner) {
 }
 
 static void skipWhitespace(Scanner* scanner) {
-	for (;;) {
+	 for (;;) {
 		char c = *scanner->current;
 		switch (c) {
 			case ' ':
@@ -57,6 +57,22 @@ static void skipWhitespace(Scanner* scanner) {
 				if (peekNext(scanner) == '/') {
 					// A comment goes until the end of the line.
 					while (*scanner->current != '\n' && !isAtEnd(scanner)) advance(scanner);
+				}
+				else if (peekNext(scanner) == '*') {
+					advance(scanner);
+					while (!isAtEnd(scanner)) {
+						if (*scanner->current == '*') {
+							advance(scanner);
+							if (*scanner->current == '/') {
+								advance(scanner);
+								break;
+							}
+						}
+						else if (*scanner->current == '\n') {
+							scanner->line++;
+						}
+						advance(scanner);
+					}
 				}
 				else {
 					return;
