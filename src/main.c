@@ -30,7 +30,7 @@ static void repl() {
 	signal(SIGINT, replSigHandler);
 
 	VM vm;
-	initVM(&vm);
+	initVM(&vm, "repl");
 
 	char* scriptName = malloc(9);
 	strcpy(scriptName, "<script>");

@@ -52,7 +52,7 @@ struct VM {
 	bool isImport;
 };
 
-void initVM(VM* vm);
+void initVM(VM* vm, char* name);
 
 InterpreterResult execute(VM* vm, Chunk* chunk);
 

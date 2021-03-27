@@ -21,7 +21,7 @@
 
 static InterpreterResult import(VM* vm, char* path, ObjString* name, Value* value);
 
-void initVM(VM* vm) {
+void initVM(VM* vm, char* name) {
 	vm->stackTop = vm->stack;
 	vm->objects = NULL;
 	vm->frameCount = 0;
@@ -60,9 +60,12 @@ void initVM(VM* vm) {
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 	tableSet(vm, &vm->globals, copyString(vm, "Iterator", 8), OBJ_VAL(vm->iteratorClass));
 
+	tableSet(vm, &vm->globals, copyString(vm, "_NAME", 5), OBJ_VAL(copyString(vm, name, strlen(name))));
+
 	defineGlobalVariables(vm);
 	defineListMethods(vm);
 	defineStringMethods(vm);
+
 }
 
 void resetVM(VM* vm) {
@@ -1256,7 +1259,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 InterpreterResult interpret(char* basePath, char* filename, const char* source) {
 	VM vm;
-	initVM(&vm);
+	initVM(&vm, "main");
 
 	InterpreterResult result = interpretVM(&vm, basePath, filename, source);
 
@@ -1294,7 +1297,7 @@ InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char
 
 InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* value) {
 	VM* vm = malloc(sizeof(VM));
-	initVM(vm);
+	initVM(vm, "module");
 
 	vm->isImport = true;
 
