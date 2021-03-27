@@ -1163,6 +1163,69 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_IMPORT_STAR: {
+					// Dupicate code is bad. 
+					ObjString* path = READ_STRING();
+					ObjString* name = READ_STRING();
+
+					char* extension = ".fox";
+
+					char* string = malloc(path->length + vm->filepath->length + 4 /*.fox*/ + 1);
+
+					memcpy(string, vm->filepath->chars, vm->filepath->length);
+					memcpy(string + vm->filepath->length, path->chars, path->length);
+					memcpy(string + vm->filepath->length + path->length, extension, 4);
+					string[path->length + vm->filepath->length + 4] = '\0';
+
+					if (_access(string, 0) == 0) {
+						Value object;
+						import(vm, string, name, &object);
+						ObjInstance* obj = AS_INSTANCE(object);
+
+						for (int i = 0; i <= obj->fields.capacity; i++) {
+							Entry* entry = &obj->fields.entries[i];
+							if (entry->key != NULL) {
+								// Copying the string due to interning making them different
+								tableSet(vm, &vm->globals, copyString(vm, entry->key->chars, entry->key->length), entry->value);
+							}
+						}
+						free(string);
+					}
+					else {
+						string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
+
+						memcpy(string, vm->basePath->chars, vm->basePath->length);
+						memcpy(string + vm->basePath->length, path->chars, path->length);
+						memcpy(string + vm->basePath->length + path->length, extension, 4);
+						string[path->length + vm->basePath->length + 4] = '\0';
+
+						if (_access(string, 0) == 0) {
+							Value object;
+							import(vm, string, name, &object);
+							
+							ObjInstance* obj = AS_INSTANCE(object);
+
+							for (int i = 0; i <= obj->fields.capacity; i++) {
+								Entry* entry = &obj->fields.entries[i];
+								if (entry->key != NULL) {
+									// Copying the string due to interning making them different
+									tableSet(vm, &vm->globals, copyString(vm, entry->key->chars, entry->key->length), entry->value);
+								}
+							}
+
+							free(string);
+						}
+
+						else {
+							runtimeError(vm, "Could not find import '%s'", path->chars);
+							free(string);
+							return STATUS_RUNTIME_ERR;
+						}
+					}
+
+					break;
+				}
+
 			case OP_TYPEOF: {
 				Value value = pop(vm);
 				

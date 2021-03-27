@@ -1630,19 +1630,29 @@ static void fromDeclaration(Parser* parser, Compiler* compiler) {
 
 	consume(parser, TOKEN_IMPORT, "Expected 'import' after import path.");
 
-	emitByte(parser, compiler, OP_IMPORT);
-	emitByte(parser, compiler, pathConstant);
-	emitByte(parser, compiler, fileNameConstant);
+	if (match(parser, TOKEN_STAR)) {
+		if (compiler->scopeDepth != 0) {
+			error(parser, "Cannot import all outside of global scope");
+		}
+		emitByte(parser, compiler, OP_IMPORT_STAR);
+		emitByte(parser, compiler, pathConstant);
+		emitByte(parser, compiler, fileNameConstant);
+	}
+	else {
+		emitByte(parser, compiler, OP_IMPORT);
+		emitByte(parser, compiler, pathConstant);
+		emitByte(parser, compiler, fileNameConstant);
 
-	do {
-		uint8_t name = parseVariable(parser, compiler, "Expected export name.");
+		do {
+			uint8_t name = parseVariable(parser, compiler, "Expected export name.");
 
-		emitByte(parser, compiler, OP_DUP);
-		emitByte(parser, compiler, OP_GET_PROPERTY);
-		emitByte(parser, compiler, name);
-		defineVariable(parser, compiler, name);
-	} while (match(parser, TOKEN_COMMA));
-	emitByte(parser, compiler, OP_POP);
+			emitByte(parser, compiler, OP_DUP);
+			emitByte(parser, compiler, OP_GET_PROPERTY);
+			emitByte(parser, compiler, name);
+			defineVariable(parser, compiler, name);
+		} while (match(parser, TOKEN_COMMA));
+		emitByte(parser, compiler, OP_POP);
+	}
 
 	consume(parser, TOKEN_SEMICOLON, "Expected ';' after import.");
 }
