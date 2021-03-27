@@ -1114,6 +1114,50 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 
 }
 
+static void pattern(Parser* parser, Compiler* compiler) {
+	if (match(parser, TOKEN_IN)) {
+		expression(parser, compiler);
+
+		emitByte(parser, compiler, OP_IN);
+	}
+	else if (match(parser, TOKEN_IS)) {
+		expression(parser, compiler);
+
+		emitByte(parser, compiler, OP_IS);
+	}
+	else if (match(parser, TOKEN_PIPE)) {
+		expression(parser, compiler);
+
+		emitByte(parser, compiler, OP_SWAP);
+		emitByte(parser, compiler, OP_CALL);
+		emitByte(parser, compiler, 1);
+	}
+	else if (match(parser, TOKEN_ELSE)) {
+		emitByte(parser, compiler, OP_POP);
+		emitByte(parser, compiler, OP_TRUE);
+	}
+	else if (match(parser, TOKEN_BANG)) {
+		if (match(parser, TOKEN_IN)) {
+			expression(parser, compiler);
+			emitByte(parser, compiler, OP_IN);
+		}
+		else if (match(parser, TOKEN_IS)) {
+			expression(parser, compiler);
+			emitByte(parser, compiler, OP_IS);
+		}
+		else {
+			expression(parser, compiler);
+			emitByte(parser, compiler, OP_EQUAL);
+		}
+		emitByte(parser, compiler, OP_NOT);
+	}
+	else {
+		expression(parser, compiler);
+
+		emitByte(parser, compiler, OP_EQUAL);
+	}
+}
+
 static void switchStatement(Parser* parser, Compiler* compiler) {
 	beginScope(compiler);
 
@@ -1132,39 +1176,14 @@ static void switchStatement(Parser* parser, Compiler* compiler) {
 	while (parser->current.type != TOKEN_RIGHT_BRACE && parser->current.type != TOKEN_EOF) {
 		emitByte(parser, compiler, OP_DUP);
 
-		if (match(parser, TOKEN_IN)) {
-			expression(parser, compiler);
+		pattern(parser, compiler);
 
-			emitByte(parser, compiler, OP_IN);
-		}
-		else if (match(parser, TOKEN_IS)) {
-			expression(parser, compiler);
-
-			emitByte(parser, compiler, OP_IS);
-		}
-		else if (match(parser, TOKEN_ELSE)) {
-			emitByte(parser, compiler, OP_POP);
-			emitByte(parser, compiler, OP_TRUE);
-		}
-		else if (match(parser, TOKEN_BANG)) {
-			if (match(parser, TOKEN_IN)) {
-				expression(parser, compiler);
-				emitByte(parser, compiler, OP_IN);
-			}
-			else if (match(parser, TOKEN_IS)) {
-				expression(parser, compiler);
-				emitByte(parser, compiler, OP_IS);
-			}
-			else {
-				expression(parser, compiler);
-				emitByte(parser, compiler, OP_EQUAL);
-			}
-			emitByte(parser, compiler, OP_NOT);
-		}
-		else {
-			expression(parser, compiler);
-
-			emitByte(parser, compiler, OP_EQUAL);
+		while (match(parser, TOKEN_COMMA)) {
+			int falseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+			int trueJump = emitJump(parser, compiler, OP_JUMP);
+			patchJump(parser, compiler, falseJump);
+			pattern(parser, compiler);
+			patchJump(parser, compiler, trueJump);
 		}
 
 		int jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
