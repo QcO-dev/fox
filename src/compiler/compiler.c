@@ -81,7 +81,7 @@ typedef enum {
 	PREC_FACTOR,      // * /
 	PREC_RANGE,       // x..y
 	PREC_UNARY,       // ! - typeof
-	PREC_CALL,        // . () [] |>
+	PREC_CALL,        // . () []
 	PREC_PRIMARY      // x {}
 } Precedence;
 
@@ -714,7 +714,7 @@ static void ternary(Parser* parser, Compiler* compiler, bool canAssign) {
 static void pipe(Parser* parser, Compiler* compiler, bool canAssign) {
 	// The compiler will stop this route at another |>
 	// This lets it add the below instructions for each one.
-	parsePrecedence(parser, compiler, PREC_TERNARY);
+	parsePrecedence(parser, compiler, PREC_PIPE + 1);
 	emitByte(parser, compiler, OP_SWAP);
 	emitByte(parser, compiler, OP_CALL);
 	emitByte(parser, compiler, 1);
