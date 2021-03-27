@@ -81,7 +81,7 @@ typedef enum {
 	PREC_FACTOR,      // * /
 	PREC_RANGE,       // x..y
 	PREC_UNARY,       // ! - typeof
-	PREC_CALL,        // . () [] |>
+	PREC_CALL,        // . () []
 	PREC_PRIMARY      // x {}
 } Precedence;
 
@@ -714,7 +714,7 @@ static void ternary(Parser* parser, Compiler* compiler, bool canAssign) {
 static void pipe(Parser* parser, Compiler* compiler, bool canAssign) {
 	// The compiler will stop this route at another |>
 	// This lets it add the below instructions for each one.
-	parsePrecedence(parser, compiler, PREC_TERNARY);
+	parsePrecedence(parser, compiler, PREC_PIPE + 1);
 	emitByte(parser, compiler, OP_SWAP);
 	emitByte(parser, compiler, OP_CALL);
 	emitByte(parser, compiler, 1);
@@ -1114,6 +1114,80 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 
 }
 
+static void switchStatement(Parser* parser, Compiler* compiler) {
+	beginScope(compiler);
+
+	consume(parser, TOKEN_LEFT_PAREN, "Expected '(' after switch.");
+
+	expression(parser, compiler);
+
+	consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after switch clause.");
+
+	consume(parser, TOKEN_LEFT_BRACE, "Expected '{' before switch body.");
+
+	int breakSkip = emitJump(parser, compiler, OP_JUMP);
+	int breakJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	patchJump(parser, compiler, breakSkip);
+
+	while (parser->current.type != TOKEN_RIGHT_BRACE && parser->current.type != TOKEN_EOF) {
+		emitByte(parser, compiler, OP_DUP);
+
+		if (match(parser, TOKEN_IN)) {
+			expression(parser, compiler);
+
+			emitByte(parser, compiler, OP_IN);
+		}
+		else if (match(parser, TOKEN_IS)) {
+			expression(parser, compiler);
+
+			emitByte(parser, compiler, OP_IS);
+		}
+		else if (match(parser, TOKEN_ELSE)) {
+			emitByte(parser, compiler, OP_POP);
+			emitByte(parser, compiler, OP_TRUE);
+		}
+		else if (match(parser, TOKEN_BANG)) {
+			if (match(parser, TOKEN_IN)) {
+				expression(parser, compiler);
+				emitByte(parser, compiler, OP_IN);
+			}
+			else if (match(parser, TOKEN_IS)) {
+				expression(parser, compiler);
+				emitByte(parser, compiler, OP_IS);
+			}
+			else {
+				expression(parser, compiler);
+				emitByte(parser, compiler, OP_EQUAL);
+			}
+			emitByte(parser, compiler, OP_NOT);
+		}
+		else {
+			expression(parser, compiler);
+
+			emitByte(parser, compiler, OP_EQUAL);
+		}
+
+		int jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+
+		consume(parser, TOKEN_ARROW, "Expected '->' after switch case.");
+
+		statement(parser, compiler);
+
+		emitByte(parser, compiler, OP_FALSE);
+		emitLoop(parser, compiler, breakJump - 1);
+
+		patchJump(parser, compiler, jump);
+	}
+
+	patchJump(parser, compiler, breakJump);
+
+	consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after switch body.");
+
+	emitByte(parser, compiler, OP_POP);
+
+	endScope(parser, compiler);
+}
+
 static void returnStatement(Parser* parser, Compiler* compiler) {
 
 	if (compiler->type == TYPE_SCRIPT) {
@@ -1174,6 +1248,9 @@ static void statement(Parser* parser, Compiler* compiler) {
 	}
 	else if (match(parser, TOKEN_FOREACH)) {
 		foreachStatement(parser, compiler);
+	}
+	else if (match(parser, TOKEN_SWITCH)) {
+		switchStatement(parser, compiler);
 	}
 	else if (match(parser, TOKEN_RETURN)) {
 		returnStatement(parser, compiler);

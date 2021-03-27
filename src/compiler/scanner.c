@@ -190,7 +190,14 @@ static TokenType identifierType(Scanner* scanner) {
 		}
 		case 'n': return checkKeyword(scanner, 1, 3, "ull", TOKEN_NULL);
 		case 'r': return checkKeyword(scanner, 1, 5, "eturn", TOKEN_RETURN);
-		case 's': return checkKeyword(scanner, 1, 4, "uper", TOKEN_SUPER);
+		case 's': 
+			if (scanner->current - scanner->start > 1) {
+				switch (scanner->start[1]) {
+					case 'u': return checkKeyword(scanner, 2, 3, "per", TOKEN_SUPER);
+					case 'w': return checkKeyword(scanner, 2, 4, "itch", TOKEN_SWITCH);
+				}
+			}
+			break;
 		case 'v': return checkKeyword(scanner, 1, 2, "ar", TOKEN_VAR);
 		case 'w': return checkKeyword(scanner, 1, 4, "hile", TOKEN_WHILE);
 
@@ -256,7 +263,6 @@ Token scanToken(Scanner* scanner) {
 		case ';': return makeToken(scanner, TOKEN_SEMICOLON);
 		case ':': return makeToken(scanner, TOKEN_COLON);
 		case ',': return makeToken(scanner, TOKEN_COMMA);
-		case '-': return makeToken(scanner, inplace(scanner, TOKEN_MINUS, TOKEN_IN_MINUS));
 		case '+': return makeToken(scanner, inplace(scanner, TOKEN_PLUS, TOKEN_IN_PLUS));
 		case '/': return makeToken(scanner, inplace(scanner, TOKEN_SLASH, TOKEN_IN_SLASH));
 		case '*': return makeToken(scanner, inplace(scanner, TOKEN_STAR, TOKEN_IN_STAR));
@@ -268,6 +274,10 @@ Token scanToken(Scanner* scanner) {
 			match(scanner, '.') ? match(scanner, '.') ? TOKEN_ELLIPSIS
 			: TOKEN_D_ELLIPSIS
 			: TOKEN_DOT);
+
+		case '-': return makeToken(scanner, 
+			match(scanner, '>') ? TOKEN_ARROW : inplace(scanner, TOKEN_MINUS, TOKEN_IN_MINUS)
+		);
 
 		case '!':
 			return makeToken(scanner,
