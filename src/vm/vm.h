@@ -6,8 +6,7 @@
 
 typedef struct Compiler Compiler;
 
-#define FRAMES_MAX 64
-#define STACK_MAX (FRAMES_MAX * UINT8_MAX + 1)
+#define FRAMES_MAX 1024
 
 typedef enum {
 	STATUS_OK,
@@ -23,10 +22,12 @@ typedef struct {
 
 struct VM {
 	Compiler* compiler;
-	CallFrame frames[FRAMES_MAX]; // Change
+	CallFrame* frames;
+	size_t frameSize;
 	CallFrame* frame;
-	int frameCount;
-	Value stack[STACK_MAX]; // TODO: Dynamic stack
+	size_t frameCount;
+	Value* stack;
+	size_t stackSize;
 	Value* stackTop;
 	Obj* objects;
 	Table strings;
