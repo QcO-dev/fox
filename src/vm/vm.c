@@ -22,6 +22,14 @@
 static InterpreterResult import(VM* vm, char* path, ObjString* name, Value* value);
 
 void initVM(VM* vm, char* name) {
+
+	vm->frameSize = 64;
+	vm->frames = malloc(vm->frameSize * sizeof(CallFrame));
+
+	vm->stackSize = 256 * vm->frameSize;
+
+	vm->stack = malloc(vm->stackSize * sizeof(Value));
+
 	vm->stackTop = vm->stack;
 	vm->objects = NULL;
 	vm->frameCount = 0;
@@ -97,17 +105,38 @@ void runtimeError(VM* vm, const char* format, ...) {
 
 	fprintf(stderr, "In File '%s':\n", vm->filename);
 
+	size_t prevLine = 0;
+	ObjFunction* prevFunction = NULL;
+	int count = 0;
+	bool repeating = false;
+
 	for (int i = vm->frameCount - 1; i >= 0; i--) {
 		CallFrame* frame = &vm->frames[i];
 		ObjFunction* function = frame->closure->function;
 		// -1 because the IP is sitting on the next instruction to be executed.
 		size_t instruction = frame->ip - function->chunk.code - 1;
-		fprintf(stderr, "[%d] in ", getLine(&function->chunk.table, instruction));
-		if (function->name == NULL) {
-			fprintf(stderr, "<script>\n");
+
+		size_t line = getLine(&function->chunk.table, instruction);
+
+		if (line != prevLine || function != prevFunction) {
+			if (repeating == true) {
+				fprintf(stderr, "[Previous * %d]\n", count);
+				repeating = false;
+				count = 0;
+			}
+			fprintf(stderr, "[%d] in ", line);
+			if (function->name == NULL) {
+				fprintf(stderr, "<script>\n");
+			}
+			else {
+				fprintf(stderr, "%s\n", function->name->chars);
+			}
+			prevFunction = function;
+			prevLine = line;
 		}
 		else {
-			fprintf(stderr, "%s\n", function->name->chars);
+			repeating = true;
+			count++;
 		}
 	}
 
@@ -232,6 +261,19 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 	if (vm->frameCount == FRAMES_MAX) {
 		runtimeError(vm, "Stack overflow.");
 		return false;
+	}
+
+	if (vm->frameCount + 1 >= vm->frameSize) {
+		int oldCount = vm->frameSize;
+		vm->frameSize = vm->frameSize < 8 ? 8 : vm->frameSize * 2;
+		vm->frames = GROW_ARRAY(vm, CallFrame, vm->frames, oldCount, vm->frameSize);
+
+		size_t oldStackSize = vm->stackSize;
+		size_t stackHeadDistance = vm->stackTop - vm->stack;
+
+		vm->stackSize = 256 * vm->frameSize;
+
+		vm->stack = GROW_ARRAY(vm, Value, vm->stack, oldStackSize, vm->stackSize);
 	}
 
 	CallFrame* frame = &vm->frames[vm->frameCount++];
@@ -1439,5 +1481,7 @@ void freeVM(VM* vm) {
 	free(vm->filename);
 	free(vm->grayStack);
 	free(vm->imports);
+	free(vm->frames);
+	free(vm->stack);
 	if (vm->isImport) free(vm);
 }
