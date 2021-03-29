@@ -1495,7 +1495,7 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 	parser->currentClass = &classCompiler;
 
 	if (match(parser, TOKEN_EXTENDS)) {
-		consume(parser, TOKEN_IDENTIFIER, "Expect superclass name.");
+		consume(parser, TOKEN_IDENTIFIER, "Expected superclass name.");
 		variable(parser, compiler, false);
 
 		if (identifiersEqual(&className, &parser->previous)) {
@@ -1524,6 +1524,20 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 		namedVariable(parser, compiler, className, false);
 		emitByte(parser, compiler, OP_INHERIT);
 		classCompiler.hasSuperclass = true;
+	}
+
+	if (match(parser, TOKEN_IMPLEMENTS)) {
+		do {
+			consume(parser, TOKEN_IDENTIFIER, "Expected class name to implement.");
+			variable(parser, compiler, false);
+
+			if (identifiersEqual(&className, &parser->previous)) {
+				error(parser, "A class can't inherit from itself.");
+			}
+
+			namedVariable(parser, compiler, className, false);
+			emitByte(parser, compiler, OP_INHERIT);
+		} while (match(parser, TOKEN_COMMA));
 	}
 
 	namedVariable(parser, compiler, className, false);

@@ -66,6 +66,7 @@ void initVM(VM* vm, char* name) {
 	defineIteratorMethods(vm, vm->iteratorClass);
 
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
+	tableSet(vm, &vm->globals, copyString(vm, "<object>", 8), OBJ_VAL(vm->objectClass)); // Allows super() in classes with no superclass
 	tableSet(vm, &vm->globals, copyString(vm, "Iterator", 8), OBJ_VAL(vm->iteratorClass));
 
 	tableSet(vm, &vm->globals, copyString(vm, "_NAME", 5), OBJ_VAL(copyString(vm, name, strlen(name))));
