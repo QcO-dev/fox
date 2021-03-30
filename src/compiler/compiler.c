@@ -1432,8 +1432,15 @@ static void function(Parser* parser, Compiler* c, FunctionType type) {
 	consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
 
 	// The body.
-	consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before function body.");
-	block(parser, &compiler);
+	if (match(parser, TOKEN_EQUAL)) {
+		expression(parser, &compiler);
+		consume(parser, TOKEN_SEMICOLON, "Expected ';' after expression.");
+		emitByte(parser, &compiler, OP_RETURN);
+	}
+	else {
+		consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+		block(parser, &compiler);
+	}
 
 	// Create the function object.
 	ObjFunction* function = endCompiler(parser, &compiler);
