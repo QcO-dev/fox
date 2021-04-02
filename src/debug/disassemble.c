@@ -88,6 +88,7 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 		case OP_DUP: return simpleInstruction("DUP", offset);
 		case OP_DUP_OFFSET: return byteInstruction("DUP_OFFSET", offset, chunk);
 		case OP_SWAP: return simpleInstruction("SWAP", offset);
+		case OP_SWAP_OFFSET: return byteInstruction("SWAP_OFFSET", offset, chunk);
 		case OP_NEGATE: return simpleInstruction("NEGATE", offset);
 		case OP_NOT: return simpleInstruction("NOT", offset);
 		case OP_BITWISE_NOT: return simpleInstruction("BITWISE_NOT", offset);
@@ -109,6 +110,8 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 		case OP_GREATER_EQ: return simpleInstruction("GREATER_EQ", offset);
 		case OP_LESS: return simpleInstruction("LESS", offset);
 		case OP_LESS_EQ: return simpleInstruction("LESS_EQ", offset);
+		case OP_INCREMENT: return simpleInstruction("INCREMENT", offset);
+		case OP_DECREMENT: return simpleInstruction("DECREMENT", offset);
 		case OP_POP: return simpleInstruction("POP", offset);
 		case OP_CONSTANT: return constantInstruction(vm, "CONSTANT", offset, chunk);
 		case OP_DEFINE_GLOBAL: return constantInstruction(vm, "DEFINE_GLOBAL", offset, chunk);

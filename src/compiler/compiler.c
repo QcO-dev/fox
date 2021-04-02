@@ -685,6 +685,42 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 		emitByte(parser, compiler, OP_SET_PROPERTY);
 		emitByte(parser, compiler, name);
 	}
+	else if (match(parser, TOKEN_INCREMENT)) {
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, OP_GET_PROPERTY);
+		emitByte(parser, compiler, name);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_INCREMENT);
+
+		emitByte(parser, compiler, OP_SET_PROPERTY);
+		emitByte(parser, compiler, name);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+	else if (match(parser, TOKEN_DECREMENT)) {
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, OP_GET_PROPERTY);
+		emitByte(parser, compiler, name);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DECREMENT);
+
+		emitByte(parser, compiler, OP_SET_PROPERTY);
+		emitByte(parser, compiler, name);
+
+		emitByte(parser, compiler, OP_POP);
+	}
 	else if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t argCount = argumentList(parser, compiler);
 		emitByte(parser, compiler, OP_INVOKE);
@@ -790,6 +826,53 @@ static void index(Parser* parser, Compiler* compiler, bool canAssign) {
 		inplaceOperator(parser, compiler, type);
 		emitByte(parser, compiler, OP_SET_INDEX);
 	}
+	else if (canAssign && match(parser, TOKEN_INCREMENT)) {
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_GET_INDEX);
+
+		emitByte(parser, compiler, OP_SWAP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, OP_INCREMENT);
+
+		emitByte(parser, compiler, OP_SET_INDEX);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+	else if (canAssign && match(parser, TOKEN_DECREMENT)) {
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_GET_INDEX);
+
+		emitByte(parser, compiler, OP_SWAP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, OP_DECREMENT);
+
+		emitByte(parser, compiler, OP_SET_INDEX);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+
 	else {
 		emitByte(parser, compiler, OP_GET_INDEX);
 	}
@@ -885,6 +968,7 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 	if (canAssign && match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
 		emitByte(parser, compiler, setOp);
+		emitByte(parser, compiler, arg);
 	}
 	else if (canAssign && isAssignment(parser)) {
 		TokenType type = parser->previous.type;
@@ -895,11 +979,36 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 		inplaceOperator(parser, compiler, type);
 
 		emitByte(parser, compiler, setOp);
+		emitByte(parser, compiler, arg);
+	}
+	else if (canAssign && match(parser, TOKEN_INCREMENT)) {
+		emitByte(parser, compiler, getOp);
+		emitByte(parser, compiler, arg);
+
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, OP_INCREMENT);
+
+		emitByte(parser, compiler, setOp);
+		emitByte(parser, compiler, arg);
+		emitByte(parser, compiler, OP_POP);
+	}
+	else if (canAssign && match(parser, TOKEN_DECREMENT)) {
+		emitByte(parser, compiler, getOp);
+		emitByte(parser, compiler, arg);
+
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, OP_DECREMENT);
+
+		emitByte(parser, compiler, setOp);
+		emitByte(parser, compiler, arg);
+		emitByte(parser, compiler, OP_POP);
 	}
 	else {
 		emitByte(parser, compiler, getOp);
+		emitByte(parser, compiler, arg);
 	}
-	emitByte(parser, compiler, arg);
 }
 
 static void variable(Parser* parser, Compiler* compiler, bool canAssign) {
@@ -1433,6 +1542,7 @@ static void function(Parser* parser, Compiler* c, FunctionType type) {
 
 	// The body.
 	if (match(parser, TOKEN_EQUAL)) {
+		// expressionStatement is not used due to the popping of the result.
 		expression(parser, &compiler);
 		consume(parser, TOKEN_SEMICOLON, "Expected ';' after expression.");
 		emitByte(parser, &compiler, OP_RETURN);
@@ -1738,6 +1848,16 @@ ParseRule rules[] = {
   [TOKEN_ASH] = {NULL, binary, PREC_SHIFT},
   [TOKEN_QUESTION] = {NULL, ternary, PREC_TERNARY},
   [TOKEN_PIPE] = {NULL, pipe, PREC_PIPE},
+  [TOKEN_IN_PLUS] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_MINUS] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_STAR] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_SLASH] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_LSH] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_RSH] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_ASH] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_BIT_AND] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_BIT_OR] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_XOR] = {NULL, NULL, PREC_NONE},
   [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
   [TOKEN_CONTINUE] = {NULL, NULL, PREC_NONE},
