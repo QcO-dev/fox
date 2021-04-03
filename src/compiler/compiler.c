@@ -43,6 +43,10 @@ typedef struct Compiler {
 	bool isLoop;
 	int continuePoint;
 	int breakPoint;
+	bool lvalue;
+	Opcode lvalueSet;
+	int lvalueArg;
+	bool expectLvalue;
 } Compiler;
 
 typedef struct ClassCompiler {
@@ -80,7 +84,8 @@ typedef enum {
 	PREC_TERM,        // + -
 	PREC_FACTOR,      // * /
 	PREC_RANGE,       // x..y
-	PREC_UNARY,       // ! - typeof
+	PREC_UNARY,       // ! - ~ typeof ++x --x
+	PREC_POSTFIX,     // x++ x--
 	PREC_CALL,        // . () []
 	PREC_PRIMARY      // x {}
 } Precedence;
@@ -126,6 +131,8 @@ static void initCompiler(Compiler* compiler, Compiler* oldCompiler, VM* vm, Pars
 	compiler->localCount = 0;
 	compiler->scopeDepth = 0;
 	compiler->isLoop = false;
+	compiler->lvalue = false;
+	compiler->expectLvalue = false;
 	compiler->function = newFunction(vm);
 	compiler->function->lambda = false;
 	compiler->function->varArgs = false;
@@ -318,6 +325,7 @@ static void inplaceOperator(Parser* parser, Compiler* compiler, TokenType type) 
 }
 
 static void parsePrecedence(Parser* parser, Compiler* compiler, Precedence precedence) {
+	compiler->lvalue = false;
 	advance(parser);
 	ParseFn prefixRule = getRule(parser->previous.type)->prefix;
 	if (prefixRule == NULL) {
@@ -642,6 +650,84 @@ static void lambdaOr(Parser* parser, Compiler* c, bool canAssign) {
 	}
 }
 
+static void prefixIncDec(Parser* parser, Compiler* compiler, bool canAssign) {
+	TokenType operatorType = parser->previous.type;
+	Token* op = &parser->previous;
+
+	compiler->expectLvalue = true;
+	parsePrecedence(parser, compiler, PREC_UNARY);
+	compiler->expectLvalue = false;
+
+	if (!compiler->lvalue) {
+		errorAt(parser, op, "Invalid right-hand expression after prefix operator.");
+	}
+
+	emitByte(parser, compiler, operatorType == TOKEN_INCREMENT ? OP_INCREMENT : OP_DECREMENT);
+	emitByte(parser, compiler, compiler->lvalueSet);
+	if(compiler->lvalueSet != OP_SET_INDEX) emitByte(parser, compiler, compiler->lvalueArg);
+}
+
+static void postIncDec(Parser* parser, Compiler* compiler, bool canAssign) {
+	TokenType operatorType = parser->previous.type;
+	if (!compiler->lvalue) {
+		error(parser, "Invalid left-hand expression before postfix operator");
+	}
+
+	Opcode opcode = operatorType == TOKEN_INCREMENT ? OP_INCREMENT : OP_DECREMENT;
+
+	if (compiler->lvalueSet == OP_SET_PROPERTY) {
+		// Replace [OP_GET_PROPERTY name] with [OP_DUP OP_GET_PROPERTY name]
+		compiler->function->chunk.code[compiler->function->chunk.count - 2] = OP_DUP;
+		compiler->function->chunk.code[compiler->function->chunk.count - 1] = OP_GET_PROPERTY;
+		emitByte(parser, compiler, compiler->lvalueArg);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, opcode);
+
+		emitByte(parser, compiler, OP_SET_PROPERTY);
+		emitByte(parser, compiler, compiler->lvalueArg);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+	else if (compiler->lvalueSet == OP_SET_INDEX) {
+		compiler->function->chunk.code[compiler->function->chunk.count - 1] = OP_DUP_OFFSET;
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_GET_INDEX);
+
+		emitByte(parser, compiler, OP_SWAP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, opcode);
+
+		emitByte(parser, compiler, OP_SET_INDEX);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+	else {
+
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, opcode);
+
+		emitByte(parser, compiler, compiler->lvalueSet);
+		emitByte(parser, compiler, compiler->lvalueArg);
+		emitByte(parser, compiler, OP_POP);
+	}
+}
+
 static void and(Parser* parser, Compiler* compiler, bool canAssign) {
 	int endJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
 
@@ -685,42 +771,6 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 		emitByte(parser, compiler, OP_SET_PROPERTY);
 		emitByte(parser, compiler, name);
 	}
-	else if (match(parser, TOKEN_INCREMENT)) {
-		emitByte(parser, compiler, OP_DUP);
-
-		emitByte(parser, compiler, OP_GET_PROPERTY);
-		emitByte(parser, compiler, name);
-
-		emitByte(parser, compiler, OP_SWAP);
-
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 1);
-
-		emitByte(parser, compiler, OP_INCREMENT);
-
-		emitByte(parser, compiler, OP_SET_PROPERTY);
-		emitByte(parser, compiler, name);
-
-		emitByte(parser, compiler, OP_POP);
-	}
-	else if (match(parser, TOKEN_DECREMENT)) {
-		emitByte(parser, compiler, OP_DUP);
-
-		emitByte(parser, compiler, OP_GET_PROPERTY);
-		emitByte(parser, compiler, name);
-
-		emitByte(parser, compiler, OP_SWAP);
-
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 1);
-
-		emitByte(parser, compiler, OP_DECREMENT);
-
-		emitByte(parser, compiler, OP_SET_PROPERTY);
-		emitByte(parser, compiler, name);
-
-		emitByte(parser, compiler, OP_POP);
-	}
 	else if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t argCount = argumentList(parser, compiler);
 		emitByte(parser, compiler, OP_INVOKE);
@@ -728,8 +778,14 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 		emitByte(parser, compiler, argCount);
 	}
 	else {
+		if (compiler->expectLvalue) {
+			emitByte(parser, compiler, OP_DUP);
+		}
 		emitByte(parser, compiler, OP_GET_PROPERTY);
 		emitByte(parser, compiler, name);
+		compiler->lvalue = true;
+		compiler->lvalueSet = OP_SET_PROPERTY;
+		compiler->lvalueArg = name;
 	}
 }
 
@@ -826,55 +882,17 @@ static void index(Parser* parser, Compiler* compiler, bool canAssign) {
 		inplaceOperator(parser, compiler, type);
 		emitByte(parser, compiler, OP_SET_INDEX);
 	}
-	else if (canAssign && match(parser, TOKEN_INCREMENT)) {
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 1);
-
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 1);
-
-		emitByte(parser, compiler, OP_GET_INDEX);
-
-		emitByte(parser, compiler, OP_SWAP_OFFSET);
-		emitByte(parser, compiler, 2);
-
-		emitByte(parser, compiler, OP_SWAP);
-
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 2);
-
-		emitByte(parser, compiler, OP_INCREMENT);
-
-		emitByte(parser, compiler, OP_SET_INDEX);
-
-		emitByte(parser, compiler, OP_POP);
-	}
-	else if (canAssign && match(parser, TOKEN_DECREMENT)) {
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 1);
-
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 1);
-
-		emitByte(parser, compiler, OP_GET_INDEX);
-
-		emitByte(parser, compiler, OP_SWAP_OFFSET);
-		emitByte(parser, compiler, 2);
-
-		emitByte(parser, compiler, OP_SWAP);
-
-		emitByte(parser, compiler, OP_DUP_OFFSET);
-		emitByte(parser, compiler, 2);
-
-		emitByte(parser, compiler, OP_DECREMENT);
-
-		emitByte(parser, compiler, OP_SET_INDEX);
-
-		emitByte(parser, compiler, OP_POP);
-	}
-
 	else {
+		if (compiler->expectLvalue) {
+			emitByte(parser, compiler, OP_DUP_OFFSET);
+			emitByte(parser, compiler, 1);
+
+			emitByte(parser, compiler, OP_DUP_OFFSET);
+			emitByte(parser, compiler, 1);
+		}
 		emitByte(parser, compiler, OP_GET_INDEX);
+		compiler->lvalue = true;
+		compiler->lvalueSet = OP_SET_INDEX;
 	}
 }
 
@@ -981,33 +999,12 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 		emitByte(parser, compiler, setOp);
 		emitByte(parser, compiler, arg);
 	}
-	else if (canAssign && match(parser, TOKEN_INCREMENT)) {
-		emitByte(parser, compiler, getOp);
-		emitByte(parser, compiler, arg);
-
-		emitByte(parser, compiler, OP_DUP);
-
-		emitByte(parser, compiler, OP_INCREMENT);
-
-		emitByte(parser, compiler, setOp);
-		emitByte(parser, compiler, arg);
-		emitByte(parser, compiler, OP_POP);
-	}
-	else if (canAssign && match(parser, TOKEN_DECREMENT)) {
-		emitByte(parser, compiler, getOp);
-		emitByte(parser, compiler, arg);
-
-		emitByte(parser, compiler, OP_DUP);
-
-		emitByte(parser, compiler, OP_DECREMENT);
-
-		emitByte(parser, compiler, setOp);
-		emitByte(parser, compiler, arg);
-		emitByte(parser, compiler, OP_POP);
-	}
 	else {
 		emitByte(parser, compiler, getOp);
 		emitByte(parser, compiler, arg);
+		compiler->lvalue = true;
+		compiler->lvalueSet = setOp;
+		compiler->lvalueArg = arg;
 	}
 }
 
@@ -1858,6 +1855,8 @@ ParseRule rules[] = {
   [TOKEN_IN_BIT_AND] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_BIT_OR] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_XOR] = {NULL, NULL, PREC_NONE},
+  [TOKEN_INCREMENT] = {prefixIncDec, postIncDec, PREC_POSTFIX},
+  [TOKEN_DECREMENT] = {prefixIncDec, postIncDec, PREC_POSTFIX},
   [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
   [TOKEN_CONTINUE] = {NULL, NULL, PREC_NONE},
