@@ -263,21 +263,31 @@ Token scanToken(Scanner* scanner) {
 		case ';': return makeToken(scanner, TOKEN_SEMICOLON);
 		case ':': return makeToken(scanner, TOKEN_COLON);
 		case ',': return makeToken(scanner, TOKEN_COMMA);
-		case '+': return makeToken(scanner, inplace(scanner, TOKEN_PLUS, TOKEN_IN_PLUS));
 		case '/': return makeToken(scanner, inplace(scanner, TOKEN_SLASH, TOKEN_IN_SLASH));
 		case '*': return makeToken(scanner, inplace(scanner, TOKEN_STAR, TOKEN_IN_STAR));
 		case '~': return makeToken(scanner, TOKEN_BIT_NOT);
 		case '^': return makeToken(scanner, inplace(scanner, TOKEN_XOR, TOKEN_IN_XOR));
 		case '?': return makeToken(scanner, TOKEN_QUESTION);
 
+		case '+': return match(scanner, '+') ? 
+			makeToken(scanner, TOKEN_INCREMENT) : 
+			makeToken(scanner, inplace(scanner, TOKEN_PLUS, TOKEN_IN_PLUS));
+
 		case '.': return makeToken(scanner,
 			match(scanner, '.') ? match(scanner, '.') ? TOKEN_ELLIPSIS
 			: TOKEN_D_ELLIPSIS
 			: TOKEN_DOT);
 
-		case '-': return makeToken(scanner, 
-			match(scanner, '>') ? TOKEN_ARROW : inplace(scanner, TOKEN_MINUS, TOKEN_IN_MINUS)
-		);
+		case '-': {
+			TokenType type = TOKEN_MINUS;
+			if (match(scanner, '=')) {
+				type = TOKEN_IN_MINUS;
+			}
+			else if (match(scanner, '-')) {
+				type = TOKEN_DECREMENT;
+			}
+			return makeToken(scanner, type);
+		}
 
 		case '!':
 			return makeToken(scanner,

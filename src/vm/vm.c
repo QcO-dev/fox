@@ -561,6 +561,17 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_SWAP_OFFSET: {
+				uint8_t offset = READ_BYTE();
+
+				Value a = peek(vm, offset);
+				Value b = pop(vm);
+
+				vm->stackTop[-offset]= b;
+				push(vm, a);
+				break;
+			}
+
 			case OP_NULL: push(vm, NULL_VAL); break;
 			case OP_TRUE: push(vm, BOOL_VAL(true)); break;
 			case OP_FALSE: push(vm, BOOL_VAL(false)); break;
@@ -779,6 +790,46 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					runtimeError(vm, "Operands must be numbers.");
 					return STATUS_RUNTIME_ERR;
 				}
+
+				break;
+			}
+
+			case OP_INCREMENT: {
+
+				if (IS_INSTANCE(peek(vm, 0))) {
+					if (!invoke(vm, copyString(vm, "++", 2), 0)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
+
+				if (!IS_NUMBER(peek(vm, 0))) {
+					runtimeError(vm, "Operand must be a number.");
+					return STATUS_RUNTIME_ERR;
+				}
+
+				push(vm, NUMBER_VAL(AS_NUMBER(pop(vm)) + 1));
+
+				break;
+			}
+
+			case OP_DECREMENT: {
+
+				if (IS_INSTANCE(peek(vm, 0))) {
+					if (!invoke(vm, copyString(vm, "--", 2), 0)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
+
+				if (!IS_NUMBER(peek(vm, 0))) {
+					runtimeError(vm, "Operand must be a number.");
+					return STATUS_RUNTIME_ERR;
+				}
+
+				push(vm, NUMBER_VAL(AS_NUMBER(pop(vm)) - 1));
 
 				break;
 			}
