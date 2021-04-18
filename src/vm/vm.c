@@ -65,10 +65,12 @@ void initVM(VM* vm, char* name) {
 	ObjClass* iteratorClass = newClass(vm, copyString(vm, "Iterator", 8));
 	vm->iteratorClass = iteratorClass;
 	defineIteratorMethods(vm, vm->iteratorClass);
+	defineObjectMethods(vm, vm->iteratorClass);
 
 	ObjClass* exceptionClass = newClass(vm, copyString(vm, "Exception", 9));
 	vm->exceptionClass = exceptionClass;
 	defineExceptionMethods(vm, vm->exceptionClass);
+	defineObjectMethods(vm, vm->exceptionClass);
 
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 	tableSet(vm, &vm->globals, copyString(vm, "<object>", 8), OBJ_VAL(vm->objectClass)); // Allows super() in classes with no superclass
