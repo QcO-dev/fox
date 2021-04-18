@@ -1373,7 +1373,21 @@ static void tryStatement(Parser* parser, Compiler* compiler) {
 		error(parser, "Expected 'catch' block after try.");
 	}
 	patchJump(parser, compiler, catchLocation);
+
+	beginScope(compiler);
+
+	if (match(parser, TOKEN_LEFT_PAREN)) {
+		uint8_t variable = parseVariable(parser, compiler, "Expected exception variable name.");
+		consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after catch clause.");
+		defineVariable(parser, compiler, variable);
+	}
+	else {
+		emitByte(parser, compiler, OP_POP);
+	}
+
 	statement(parser, compiler);
+
+	endScope(parser, compiler);
 
 	patchJump(parser, compiler, tryFinallyJump);
 
