@@ -63,5 +63,8 @@ typedef enum {
 	OP_IMPORT_STAR,
 	OP_TYPEOF,
 	OP_IMPLEMENTS,
+	OP_THROW,
+	OP_TRY_BEGIN,
+	OP_TRY_END,
 	OP_RETURN
 } Opcode;

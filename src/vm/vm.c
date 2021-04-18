@@ -12,6 +12,7 @@
 #include <natives/string.h>
 #include <natives/objectNative.h>
 #include <natives/iterator.h>
+#include <natives/exception.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -61,9 +62,13 @@ void initVM(VM* vm, char* name) {
 	vm->importClass = importClass;
 	defineObjectMethods(vm, vm->importClass);
 
-	ObjClass* iteratorClass = newClass(vm, copyString(vm, "<iterator>", 10));
+	ObjClass* iteratorClass = newClass(vm, copyString(vm, "Iterator", 8));
 	vm->iteratorClass = iteratorClass;
 	defineIteratorMethods(vm, vm->iteratorClass);
+
+	ObjClass* exceptionClass = newClass(vm, copyString(vm, "Exception", 9));
+	vm->exceptionClass = exceptionClass;
+	defineExceptionMethods(vm, vm->exceptionClass);
 
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 	tableSet(vm, &vm->globals, copyString(vm, "<object>", 8), OBJ_VAL(vm->objectClass)); // Allows super() in classes with no superclass
@@ -74,7 +79,6 @@ void initVM(VM* vm, char* name) {
 	defineGlobalVariables(vm);
 	defineListMethods(vm);
 	defineStringMethods(vm);
-
 }
 
 void resetVM(VM* vm) {
@@ -280,6 +284,7 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 	CallFrame* frame = &vm->frames[vm->frameCount++];
 	frame->closure = closure;
 	frame->ip = closure->function->chunk.code;
+	frame->isTry = false;
 
 	frame->slots = vm->stackTop - expected - 1;
 	return true;
@@ -904,6 +909,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_RUNTIME_ERR;
 				}
 				vm->frame = &vm->frames[vm->frameCount - 1];
+
 				break;
 			}
 
@@ -931,6 +937,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_RUNTIME_ERR;
 				}
 				vm->frame = &vm->frames[vm->frameCount - 1];
+
 				break;
 			}
 
@@ -1387,6 +1394,72 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_THROW: {
+				Value throwee = pop(vm);
+
+				if (IS_INSTANCE(throwee)) {
+					Value exceptionInit;
+					tableGet(&vm->exceptionClass->methods, copyString(vm, "Exception", 9), &exceptionInit);
+
+					ObjNative* native = AS_NATIVE_OBJ(exceptionInit);
+					native->isBound = true;
+					native->bound = throwee;
+					callValue(vm, OBJ_VAL(native), 0);
+					vm->frame = &vm->frames[vm->frameCount - 1];
+				}
+				else {
+					ObjInstance* inst = newInstance(vm, vm->exceptionClass);
+
+					Value exceptionInit;
+					tableGet(&vm->exceptionClass->methods, copyString(vm, "Exception", 9), &exceptionInit);
+
+					ObjNative* native = AS_NATIVE_OBJ(exceptionInit);
+					native->isBound = true;
+					native->bound = OBJ_VAL(inst);
+					callValue(vm, OBJ_VAL(native), 0);
+					vm->frame = &vm->frames[vm->frameCount - 1];
+
+					throwee = OBJ_VAL(inst);
+				}
+
+				while (!vm->frame->isTry) {
+					Value result = pop(vm);
+
+					closeUpvalues(vm, vm->frame->slots);
+
+					vm->frameCount--;
+					if (vm->frameCount == 0) {
+						pop(vm);
+						printf("Exception");
+						return STATUS_RUNTIME_ERR;
+					}
+
+					vm->stackTop = vm->frame->slots;
+					push(vm, result);
+
+					vm->frame = &vm->frames[vm->frameCount - 1];
+				}
+
+				vm->frame->isTry = false;
+				vm->frame->ip = vm->frame->catchJump;
+
+				break;
+			}
+
+			case OP_TRY_BEGIN: {
+				uint16_t catchLocation = READ_SHORT();
+
+				vm->frame->isTry = true;
+				vm->frame->catchJump = vm->frame->ip + catchLocation;
+				
+				break;
+			}
+
+			case OP_TRY_END: {
+				vm->frame->isTry = false;
+				break;
+			}
+
 			case OP_RETURN: {
 				Value result = pop(vm);
 
@@ -1402,6 +1475,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				push(vm, result);
 
 				vm->frame = &vm->frames[vm->frameCount - 1];
+
 				break;
 			}
 		}

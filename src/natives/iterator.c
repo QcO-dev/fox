@@ -121,7 +121,7 @@ Value iteratorDone(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 }
 
 void defineIteratorMethods(VM* vm, ObjClass* klass) {
-	defineNative(vm, &klass->methods, "<iterator>", iteratorInitializer, 1, false);
+	defineNative(vm, &klass->methods, "Iterator", iteratorInitializer, 1, false);
 	defineNative(vm, &klass->methods, "iterator", iteratorIterator, 0, false);
 	defineNative(vm, &klass->methods, "next", iteratorNext, 0, false);
 	defineNative(vm, &klass->methods, "done", iteratorDone, 0, false);

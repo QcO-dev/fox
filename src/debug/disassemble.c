@@ -164,6 +164,15 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 		case OP_RANGE: return simpleInstruction("RANGE", offset);
 		case OP_TYPEOF: return simpleInstruction("TYPEOF", offset);
 		case OP_IMPLEMENTS: return simpleInstruction("IMPLEMENTS", offset);
+		case OP_THROW:  return simpleInstruction("THROW", offset);
+		case OP_TRY_BEGIN: {
+			uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
+			jump |= chunk->code[offset + 2];
+
+			printf("%-16s %4d", "TRY_BEGIN", offset + jump);
+			return offset + 3;
+		}
+		case OP_TRY_END: return simpleInstruction("TRY_END", offset);
 		default:
 			printf("Unknown opcode: %02X", instruction);
 			return offset + 1;
