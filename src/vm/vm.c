@@ -73,6 +73,7 @@ void initVM(VM* vm, char* name) {
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 	tableSet(vm, &vm->globals, copyString(vm, "<object>", 8), OBJ_VAL(vm->objectClass)); // Allows super() in classes with no superclass
 	tableSet(vm, &vm->globals, copyString(vm, "Iterator", 8), OBJ_VAL(vm->iteratorClass));
+	tableSet(vm, &vm->globals, copyString(vm, "Exception", 9), OBJ_VAL(vm->exceptionClass));
 
 	tableSet(vm, &vm->globals, copyString(vm, "_NAME", 5), OBJ_VAL(copyString(vm, name, strlen(name))));
 
@@ -1397,40 +1398,70 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			case OP_THROW: {
 				Value throwee = pop(vm);
 
-				if (IS_INSTANCE(throwee)) {
-					Value exceptionInit;
-					tableGet(&vm->exceptionClass->methods, copyString(vm, "Exception", 9), &exceptionInit);
-
-					ObjNative* native = AS_NATIVE_OBJ(exceptionInit);
-					native->isBound = true;
-					native->bound = throwee;
-					callValue(vm, OBJ_VAL(native), 0);
-					vm->frame = &vm->frames[vm->frameCount - 1];
-				}
-				else {
+				if(!IS_INSTANCE(throwee)) {
 					ObjInstance* inst = newInstance(vm, vm->exceptionClass);
 
-					Value exceptionInit;
-					tableGet(&vm->exceptionClass->methods, copyString(vm, "Exception", 9), &exceptionInit);
-
-					ObjNative* native = AS_NATIVE_OBJ(exceptionInit);
-					native->isBound = true;
-					native->bound = OBJ_VAL(inst);
-					callValue(vm, OBJ_VAL(native), 0);
-					vm->frame = &vm->frames[vm->frameCount - 1];
+					tableSet(vm, &inst->fields, copyString(vm, "value", 5), throwee);
 
 					throwee = OBJ_VAL(inst);
 				}
+				push(vm, throwee);
+				Table* fields = &AS_INSTANCE(throwee)->fields;
+				tableSet(vm, fields, copyString(vm, "filename", 8), OBJ_VAL(copyString(vm, vm->filename, strlen(vm->filename))));
+
+				ObjFunction* function = vm->frame->closure->function;
+
+				size_t instruction = vm->frame->ip - function->chunk.code - 1;
+
+				size_t line = getLine(&function->chunk.table, instruction);
+
+				tableSet(vm, fields, copyString(vm, "line", 4), NUMBER_VAL(line));
+
+				ValueArray stackTrace;
+				initValueArray(&stackTrace);
 
 				while (!vm->frame->isTry) {
 					Value result = pop(vm);
 
 					closeUpvalues(vm, vm->frame->slots);
+					
+					function = vm->frame->closure->function;
+
+					instruction = vm->frame->ip - function->chunk.code - 1;
+
+					line = getLine(&function->chunk.table, instruction);
+
+					// In form:
+					// [%d] in %s <- line, function name
+					int lineNumberLength = snprintf(NULL, 0, "%d", line);
+					size_t lineLength = 1 + lineNumberLength + 1 + 4 + (function->name == NULL ? 8 : function->name->length);
+					char* str = malloc(lineLength + 1);
+					sprintf(str, "[%d] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
+
+					writeValueArray(vm, &stackTrace, OBJ_VAL(takeString(vm, str, lineLength)));
 
 					vm->frameCount--;
 					if (vm->frameCount == 0) {
 						pop(vm);
-						printf("Exception");
+						
+						Value value;
+						char* valueString = "\0";
+						if (tableGet(fields, copyString(vm, "value", 5), &value)) {
+							valueString = valueToString(vm, value);
+						}
+
+						Value name;
+						char* nameString = NULL;
+						if (tableGet(fields, copyString(vm, "name", 4), &name)) {
+							nameString = valueToString(vm, name);
+						}
+
+						fprintf(stderr, "%s in %s: %s\n", nameString == NULL ? "Exception" : nameString, vm->filename, valueString);
+						
+						for (size_t i = 0; i < stackTrace.count; i++) {
+							fprintf(stderr, "%s\n", AS_CSTRING(stackTrace.values[i]));
+						}
+
 						return STATUS_RUNTIME_ERR;
 					}
 
@@ -1439,6 +1470,27 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 					vm->frame = &vm->frames[vm->frameCount - 1];
 				}
+
+				// Append last call (the one inside the try block)
+				function = vm->frame->closure->function;
+
+				instruction = vm->frame->ip - function->chunk.code - 1;
+
+				line = getLine(&function->chunk.table, instruction);
+
+				// In form:
+				// [%d] in %s <- line, function name
+				int lineNumberLength = snprintf(NULL, 0, "%d", line);
+				size_t lineLength = 1 + lineNumberLength + 1 + 4 + (function->name == NULL ? 8 : function->name->length);
+				char* str = malloc(lineLength + 1);
+				sprintf(str, "[%d] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
+
+				writeValueArray(vm, &stackTrace, OBJ_VAL(takeString(vm, str, lineLength)));
+
+
+				ObjList* stackTraceList = newList(vm, stackTrace);
+
+				tableSet(vm, fields, copyString(vm, "stack", 5), OBJ_VAL(stackTraceList));
 
 				vm->frame->isTry = false;
 				vm->frame->ip = vm->frame->catchJump;
