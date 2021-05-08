@@ -1,14 +1,19 @@
+#include "file.h"
 #include <core/common.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-char* readFile(const char* path) {
+File readFile(const char* path) {
 	FILE* file = fopen(path, "rb");
 
 	if (file == NULL) {
-		fprintf(stderr, "Could not open file \"%s\".", path);
-		return NULL;
+		size_t length = snprintf(NULL, 0, "Could not open file \"%s\".", path);
+
+		char* error = malloc(length + 1);
+		sprintf(error, "Could not open file \"%s\".", path);
+
+		return (File) {.contents = error, .isError = true};
 	}
 
 	fseek(file, 0L, SEEK_END);
@@ -17,21 +22,28 @@ char* readFile(const char* path) {
 
 	char* buffer = (char*)malloc(fileSize + 1);
 	if (buffer == NULL) {
-		fprintf(stderr, "Not enough memory to read \"%s\".", path);
-		return NULL;
-	}
+		size_t length = snprintf(NULL, 0, "Not enough memory to read \"%s\".", path);
 
+		char* error = malloc(length + 1);
+		sprintf(error, "Not enough memory to read \"%s\".", path);
+
+		return (File) { .contents = error, .isError = true };
+	}
 
 	size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
 	buffer[bytesRead] = '\0';
 
 	if (bytesRead < fileSize) {
-		fprintf(stderr, "Could not read file \"%s\".", path);
-		return NULL;
+		size_t length = snprintf(NULL, 0, "Could not read file \"%s\".", path);
+
+		char* error = malloc(length + 1);
+		sprintf(error, "Could not read file \"%s\".", path);
+
+		return (File) { .contents = error, .isError = true };
 	}
 
 	fclose(file);
-	return buffer;
+	return (File) {.contents = buffer, .isError = false};
 }
 
 char* fromLastInstance(const char* haystack, const char* needle) {

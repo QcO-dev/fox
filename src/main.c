@@ -88,9 +88,10 @@ static void runFile(const char* path) {
 		strcpy(name, slashRoot);
 	}
 
-	char* source = readFile(path);
-	if (source == NULL) {
-		fprintf(stderr, "\n");
+	File file = readFile(path);
+	char* source = file.contents;
+	if (file.isError) {
+		fprintf(stderr, "%s\n", file.contents);
 		exit(-4);
 	}
 

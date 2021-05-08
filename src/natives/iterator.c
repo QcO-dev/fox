@@ -22,22 +22,19 @@ Value iteratorNext(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 
 	Value data;
 	if (!tableGet(&instance->fields, copyString(vm, "data", 4), &data)) {
-		runtimeError(vm, "Iterator object must have a 'data' property.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "UndefinedPropertyException", "Iterator object must have a 'data' property.");
+		return pop(vm);
 	}
 
 	Value indexValue;
 	if (!tableGet(&instance->fields, copyString(vm, "index", 5), &indexValue)) {
-		runtimeError(vm, "Iterator object must have an 'index' property.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "UndefinedPropertyException", "Iterator object must have an 'index' property.");
+		return pop(vm);
 	}
 
 	if (!IS_NUMBER(indexValue) || ceil(AS_NUMBER(indexValue)) != AS_NUMBER(indexValue)) {
-		runtimeError(vm, "Iterator object's 'index' must be an integer.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "TypeException", "Iterator object's 'index' must be an integer.");
+		return pop(vm);
 	}
 	double dIndex = AS_NUMBER(indexValue);
 
@@ -53,6 +50,8 @@ Value iteratorNext(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 			runtimeError(vm, "Iterator object's 'index' cannot be larger than the length (%d >= %d).", index, list->items.count);
 			*hasError = true;
 			return NULL_VAL;
+			*hasError = !throwException(vm, "TypeException", "Iterator object's 'index' must be an integer.");
+			return pop(vm);
 		}
 
 		returnValue = list->items.values[index];
@@ -62,17 +61,15 @@ Value iteratorNext(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 		ObjString* string = AS_STRING(data);
 
 		if (index >= string->length) {
-			runtimeError(vm, "Iterator object's 'index' cannot be larger than the length (%d >= %d).", index, string->length);
-			*hasError = true;
-			return NULL_VAL;
+			*hasError = !throwException(vm, "InvalidIndexException", "Iterator object's 'index' cannot be larger than the length (%d >= %d).", index, string->length);
+			return pop(vm);
 		}
 
 		returnValue = OBJ_VAL(copyString(vm, &string->chars[index], 1));
 	}
 	else {
-		runtimeError(vm, "Iterator object's 'data' must be a list or a string.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "TypeException", "Iterator object's 'data' must be a list or a string.");
+		return pop(vm);
 	}
 
 	tableSet(vm, &instance->fields, copyString(vm, "index", 5), NUMBER_VAL(index + 1));
@@ -86,22 +83,19 @@ Value iteratorDone(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 
 	Value data;
 	if (!tableGet(&instance->fields, copyString(vm, "data", 4), &data)) {
-		runtimeError(vm, "Iterator object must have a 'data' property.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "UndefinedPropertyException", "Iterator object must have a 'data' property.");
+		return pop(vm);
 	}
 
 	Value indexValue;
 	if (!tableGet(&instance->fields, copyString(vm, "index", 5), &indexValue)) {
-		runtimeError(vm, "Iterator object must have an 'index' property.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "UndefinedPropertyException", "Iterator object must have an 'index' property.");
+		return pop(vm);
 	}
 
 	if (!IS_NUMBER(indexValue) || ceil(AS_NUMBER(indexValue)) != AS_NUMBER(indexValue)) {
-		runtimeError(vm, "Iterator object's 'index' must be an integer.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "TypeException", "Iterator object's 'index' must be an integer.");
+		return pop(vm);
 	}
 	double dIndex = AS_NUMBER(indexValue);
 
@@ -114,9 +108,8 @@ Value iteratorDone(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 		return BOOL_VAL(index >= AS_STRING(data)->length);
 	}
 	else {
-		runtimeError(vm, "Iterator object's 'data' must be a list or a string.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "TypeException", "Iterator object's 'data' must be a list or a string.");
+		return pop(vm);
 	}
 }
 

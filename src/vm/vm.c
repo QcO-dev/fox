@@ -212,8 +212,8 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 				}
 			}
 			else {
-				runtimeError(vm, "Expected %d or more arguments but got %d.", needed, argCount);
-				return false;
+				pop(vm);
+				return throwException(vm, "ArityException", "Expected %d or more arguments but got %d.", needed, argCount);
 			}
 		}
 
@@ -260,18 +260,18 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 				}
 			}
 			else {
-				runtimeError(vm, "Expected %d arguments but got %d.", closure->function->arity, argCount);
-				return false;
+				pop(vm);
+				return throwException(vm, "ArityException", "Expected %d arguments but got %d.", closure->function->arity, argCount);
 			}
 		}
 	}
 
 	if (vm->frameCount == FRAMES_MAX) {
-		runtimeError(vm, "Stack overflow.");
+		runtimeError(vm, "StackOverflowException: Stack limit reached (%d frames)", FRAMES_MAX);
 		return false;
 	}
 
-	if (vm->frameCount + 1 >= vm->frameSize) {
+	if (vm->frameCount + 1 == vm->frameSize) {
 		int oldCount = vm->frameSize;
 		vm->frameSize = vm->frameSize < 8 ? 8 : vm->frameSize * 2;
 		vm->frames = GROW_ARRAY(vm, CallFrame, vm->frames, oldCount, vm->frameSize);
@@ -282,6 +282,7 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 		vm->stackSize = 256 * vm->frameSize;
 
 		vm->stack = GROW_ARRAY(vm, Value, vm->stack, oldStackSize, vm->stackSize);
+		vm->stackTop = &vm->stack[stackHeadDistance];
 	}
 
 	CallFrame* frame = &vm->frames[vm->frameCount++];
@@ -290,6 +291,7 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 	frame->isTry = false;
 
 	frame->slots = vm->stackTop - expected - 1;
+	vm->frame = frame;
 	return true;
 }
 
@@ -315,8 +317,9 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 					return call(vm, AS_CLOSURE(initalizer), argCount);
 				}
 				else if (argCount != 0) {
-					runtimeError(vm, "Expected 0 arguments but got %d.", argCount);
-					return false;
+					pop(vm);
+					pop(vm);
+					return throwException(vm, "ArityException", "Expected 0 arguments but got %d.", argCount);
 				}
 
 				return true;
@@ -335,8 +338,8 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 				ObjNative* obj = AS_NATIVE_OBJ(callee);
 				if (argCount != obj->arity) {
 					if (!(obj->varArgs && argCount > obj->arity)) {
-						runtimeError(vm, "Expected %d arguments but got %d.", obj->arity, argCount);
-						return false;
+						pop(vm);
+						return throwException(vm, "ArityException", "Expected %d arguments but got %d.", obj->arity, argCount);
 					}
 				}
 
@@ -345,6 +348,7 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 				Value result = native(vm, argCount, vm->stackTop - argCount, obj->isBound ? &obj->bound : NULL, &hasError);
 				vm->stackTop -= argCount + 1;
 				push(vm, result);
+
 				return !hasError;
 			}
 
@@ -353,9 +357,8 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 				break;
 		}
 	}
-
-	runtimeError(vm, "Can only call functions and classes.");
-	return false;
+	pop(vm);
+	return throwException(vm, "InvalidOperationException", "Can only call functions and classes.");
 }
 
 static ObjUpvalue* captureUpvalue(VM* vm, Value* local) {
@@ -406,7 +409,6 @@ static void defineMethod(VM* vm, ObjString* name) {
 static bool bindMethod(VM* vm, ObjClass* klass, ObjString* name) {
 	Value method;
 	if (!tableGet(&klass->methods, name, &method)) {
-		runtimeError(vm, "Undefined property '%s'.", name->chars);
 		return false;
 	}
 
@@ -419,8 +421,9 @@ static bool bindMethod(VM* vm, ObjClass* klass, ObjString* name) {
 static bool invokeFromClass(VM* vm, ObjInstance* instance, ObjClass* klass, ObjString* name, size_t argCount) {
 	Value method;
 	if (!tableGet(&klass->methods, name, &method)) {
-		runtimeError(vm, "Undefined property '%s'.", name->chars);
-		return false;
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "UndefinedPropertyException", "Undefined property '%s'.", name->chars);
 	}
 
 	if (IS_NATIVE(method)) {
@@ -526,7 +529,7 @@ static bool throwGeneral(VM* vm, ObjInstance* throwee) {
 	return true;
 }
 
-static bool throwException(VM* vm, char* name, char* reason, ...) {
+bool throwException(VM* vm, char* name, char* reason, ...) {
 
 	va_list args;
 	va_start(args, reason);
@@ -567,10 +570,9 @@ bool invoke(VM* vm, ObjString* name, int argCount) {
 			native->bound = receiver;
 			return callValue(vm, OBJ_VAL(native), argCount);
 		}
-
-		runtimeError(vm, "Unknown list method.");
-		return false;
-
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "UndefinedPropertyException", "Undefined list method.");
 	}
 	else if (IS_STRING(receiver)) {
 		Value value;
@@ -582,12 +584,14 @@ bool invoke(VM* vm, ObjString* name, int argCount) {
 			return callValue(vm, OBJ_VAL(native), argCount);
 		}
 
-		runtimeError(vm, "Unknown string method.");
-		return false;
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "UndefinedPropertyException", "Undefined string method.");
 	}
 	else {
-		runtimeError(vm, "Only instances have methods.");
-		return false;
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "InvalidOperationException", "Only instances have properties.");
 	}
 }
 
@@ -610,14 +614,14 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			break; \
 	   } \
 	  if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) { \
-        pop(vm); \
-        pop(vm); \
+		pop(vm); \
+		pop(vm); \
 		if(!throwException(vm, "InvalidOperationException", "Operands must be numbers.")) return STATUS_RUNTIME_ERR;\
-        break;\
+		break;\
 	  } \
-      double b = AS_NUMBER(pop(vm)); \
-      double a = AS_NUMBER(pop(vm)); \
-      push(vm, valueType(a op b)); \
+	  double b = AS_NUMBER(pop(vm)); \
+	  double a = AS_NUMBER(pop(vm)); \
+	  push(vm, valueType(a op b)); \
 	} while (false)
 
 #define BINARY_INTEGER_OP(vm, valueType, op) \
@@ -631,9 +635,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 	   } \
 	  if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) { \
 		pop(vm); \
-        pop(vm); \
+		pop(vm); \
 		if(!throwException(vm, "InvalidOperationException", "Operands must be numbers.")) return STATUS_RUNTIME_ERR;\
-        break;\
+		break;\
 	  } \
 	  int64_t b = (int64_t) AS_NUMBER(pop(vm)); \
 	  int64_t a = (int64_t) AS_NUMBER(pop(vm)); \
@@ -1106,7 +1110,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* name = READ_STRING();
 				ObjClass* superclass = AS_CLASS(pop(vm));
 				if (!bindMethod(vm, superclass, name)) {
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "UndefinedPropertyException", "Undefined Property '%s'", name->chars)) return STATUS_RUNTIME_ERR;
 				}
 				break;
 			}
@@ -1145,7 +1150,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 						break;
 					}
 					if (!bindMethod(vm, instance->class, name)) {
-						return STATUS_RUNTIME_ERR;
+						pop(vm);
+						pop(vm);
+						if(!throwException(vm, "UndefinedPropertyException", "Undefined Property '%s'", name->chars)) return STATUS_RUNTIME_ERR;
+						break;
 					}
 					break;
 				}
@@ -1229,7 +1237,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 						break;
 					}
 					if (!bindMethod(vm, instance->class, name)) {
-						return STATUS_RUNTIME_ERR;
+						pop(vm);
+						pop(vm);
+						if (!throwException(vm, "UndefinedPropertyException", "Undefined Property '%s'", name->chars)) return STATUS_RUNTIME_ERR;
 					}
 					break;
 
@@ -1637,9 +1647,11 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 
 	vm->filepath = takeString(vm, filepath, filepathIndex);
 
-	char* source = readFile(path);
-	if (source == NULL) { 
-		fprintf(stderr, "\n");
+	File file = readFile(path);
+	char* source = file.contents;
+	if (file.isError) { 
+		fprintf(stderr, "%s\n", file.contents);
+		free(file.contents);
 		return STATUS_RUNTIME_ERR; 
 	}
 
