@@ -36,10 +36,10 @@ Value exceptionGetStackTrace(VM* vm, size_t argCount, Value* args, Value* bound,
 		filenameString = valueToString(vm, filename);
 	}
 
-	size_t size = snprintf(NULL, 0, "%s in %s: %s", nameString == NULL ? "Exception" : nameString, filenameString, valueString);
+	size_t size = snprintf(NULL, 0, "%s: %s\nIn file %s:", nameString == NULL ? "Exception" : nameString, valueString, filenameString);
 
 	string = malloc(size + 1);
-	sprintf(string, "%s in %s: %s", nameString == NULL ? "Exception" : nameString, filenameString, valueString);
+	sprintf(string, "%s: %s\nIn file %s:", nameString == NULL ? "Exception" : nameString, valueString, filenameString);
 
 	for (size_t i = 0; i < stackTrace.count; i++) {
 		size_t lineSize = snprintf(NULL, 0, "\n%s", AS_CSTRING(stackTrace.values[i]));
