@@ -21,9 +21,9 @@ static Value clockNative(VM* vm, size_t argCount, Value* args, Value* bound, boo
 
 static Value sqrtNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	if (!IS_NUMBER(args[0])) {
-		runtimeError(vm, "Expected first parameter to be a number.");
-		*hasError = true;
-		return NULL_VAL;
+		//runtimeError(vm, "Expected first parameter to be a number.");
+		*hasError = !throwException(vm, "TypeException", "Expected first parameter to be a number.");
+		return pop(vm);
 	}
 
 	return NUMBER_VAL(sqrt(AS_NUMBER(args[0])));
@@ -43,17 +43,16 @@ static Value inputNative(VM* vm, size_t argCount, Value* args, Value* bound, boo
 
 static Value readNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	if (!IS_STRING(args[0])) {
-		runtimeError(vm, "Expected first parameter to be a string.");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "TypeException", "Expected first parameter to be a string.");
+		return pop(vm);
 	}
-	char* contents = readFile(AS_CSTRING(args[0]));
-	if (contents == NULL) {
-		runtimeError(vm, "Could not open file '%s'", AS_CSTRING(args[0]));
-		*hasError = true;
-		return NULL_VAL;
+	File file = readFile(AS_CSTRING(args[0]));
+	if (file.isError) {
+		*hasError = !throwException(vm, "IOException", file.contents);
+		free(file.contents);
+		return pop(vm);
 	}
-	return OBJ_VAL(takeString(vm, contents, strlen(contents)));
+	return OBJ_VAL(takeString(vm, file.contents, strlen(file.contents)));
 }
 
 static Value printNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {

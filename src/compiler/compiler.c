@@ -23,7 +23,7 @@ typedef struct {
 	bool isLocal;
 } Upvalue;
 
-typedef enum {
+typedef enum FunctionType {
 	TYPE_FUNCTION,
 	TYPE_METHOD,
 	TYPE_INITIALIZER,
@@ -56,7 +56,7 @@ typedef struct ClassCompiler {
 	Token name;
 } ClassCompiler;
 
-typedef struct {
+typedef struct Parser {
 	Scanner* scanner;
 	ClassCompiler* currentClass;
 	VM* vm;
@@ -68,7 +68,7 @@ typedef struct {
 
 typedef void (*ParseFn)(Parser* parser, Compiler* compiler, bool canAssign);
 
-typedef enum {
+typedef enum Precedence {
 	PREC_NONE,
 	PREC_ASSIGNMENT,  // =
 	PREC_PIPE,        // x |> y
@@ -90,7 +90,7 @@ typedef enum {
 	PREC_PRIMARY      // x {}
 } Precedence;
 
-typedef struct {
+typedef struct ParseRule {
 	ParseFn prefix;
 	ParseFn infix;
 	Precedence precedence;
@@ -1344,6 +1344,56 @@ static void exportStatement(Parser* parser, Compiler* compiler) {
 	consume(parser, TOKEN_SEMICOLON, "Expect ';' after export statement.");
 }
 
+static void throwStatement(Parser* parser, Compiler* compiler) {
+	if (compiler->type == TYPE_SCRIPT || compiler->type == TYPE_INITIALIZER) {
+		error(parser, "Cannot use throw in the global scope or in a class's initializer");
+	}
+
+	expression(parser, compiler);
+
+	emitByte(parser, compiler, OP_THROW);
+
+	consume(parser, TOKEN_SEMICOLON, "Expect ';' after throw statement.");
+}
+
+static void tryStatement(Parser* parser, Compiler* compiler) {
+	emitByte(parser, compiler, OP_TRY_BEGIN);
+	int catchLocation = currentChunk(compiler)->count;
+	emitByte(parser, compiler, 0xff);
+	emitByte(parser, compiler, 0xff);
+	// try statement
+	statement(parser, compiler);
+	emitByte(parser, compiler, OP_TRY_END);
+	int tryFinallyJump = emitJump(parser, compiler, OP_JUMP);
+
+	if (!match(parser, TOKEN_CATCH)) {
+		error(parser, "Expected 'catch' block after try.");
+	}
+	patchJump(parser, compiler, catchLocation);
+
+	beginScope(compiler);
+
+	if (match(parser, TOKEN_LEFT_PAREN)) {
+		uint8_t variable = parseVariable(parser, compiler, "Expected exception variable name.");
+		consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after catch clause.");
+		defineVariable(parser, compiler, variable);
+	}
+	else {
+		emitByte(parser, compiler, OP_POP);
+	}
+
+	statement(parser, compiler);
+
+	endScope(parser, compiler);
+
+	patchJump(parser, compiler, tryFinallyJump);
+
+	if (match(parser, TOKEN_FINALLY)) {
+		statement(parser, compiler);
+	}
+
+}
+
 static void beginScope(Compiler* compiler) {
 	compiler->scopeDepth++;
 }
@@ -1387,6 +1437,12 @@ static void statement(Parser* parser, Compiler* compiler) {
 	}
 	else if (match(parser, TOKEN_EXPORT)) {
 		exportStatement(parser, compiler);
+	}
+	else if (match(parser, TOKEN_THROW)) {
+		throwStatement(parser, compiler);
+	}
+	else if (match(parser, TOKEN_TRY)) {
+		tryStatement(parser, compiler);
 	}
 	else if (match(parser, TOKEN_CONTINUE)) {
 		if (!compiler->isLoop) error(parser, "Cannot use 'continue' outside of a loop.");
@@ -1858,12 +1914,14 @@ ParseRule rules[] = {
   [TOKEN_INCREMENT] = {prefixIncDec, postIncDec, PREC_POSTFIX},
   [TOKEN_DECREMENT] = {prefixIncDec, postIncDec, PREC_POSTFIX},
   [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
+  [TOKEN_CATCH] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
   [TOKEN_CONTINUE] = {NULL, NULL, PREC_NONE},
   [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
   [TOKEN_EXTENDS] = {NULL, NULL, PREC_NONE},
   [TOKEN_EXPORT] = {NULL, NULL, PREC_NONE},
   [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
+  [TOKEN_FINALLY] = {NULL, NULL, PREC_NONE},
   [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
   [TOKEN_FOREACH] = {NULL, NULL, PREC_NONE},
   [TOKEN_FUNCTION] = {NULL, NULL, PREC_NONE},
@@ -1876,7 +1934,9 @@ ParseRule rules[] = {
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},
   [TOKEN_THIS] = {this, NULL, PREC_NONE},
+  [TOKEN_THROW] = {NULL, NULL, PREC_NONE},
   [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
+  [TOKEN_TRY] = {NULL, NULL, PREC_NONE},
   [TOKEN_TYPEOF] = {unary, NULL, PREC_NONE},
   [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
   [TOKEN_WHILE] = {NULL, NULL, PREC_NONE},

@@ -37,9 +37,8 @@ Value objectValuesNative(VM* vm, size_t argCount, Value* args, Value* bound, boo
 
 Value objectHasPropNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
 	if (!IS_STRING(args[0])) {
-		runtimeError(vm, "Expected first parameter to be a string.\nin hasProp");
-		*hasError = true;
-		return NULL_VAL;
+		*hasError = !throwException(vm, "TypeError", "Expected first parameter to be a string.");
+		return pop(vm);
 	}
 
 	Value v;

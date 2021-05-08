@@ -18,6 +18,8 @@ typedef struct {
 	ObjClosure* closure;
 	uint8_t* ip;
 	Value* slots;
+	bool isTry;
+	uint8_t* catchJump;
 } CallFrame;
 
 struct VM {
@@ -38,6 +40,7 @@ struct VM {
 	ObjClass* objectClass;
 	ObjClass* importClass;
 	ObjClass* iteratorClass;
+	ObjClass* exceptionClass;
 	ObjUpvalue* openUpvalues;
 	size_t grayCount;
 	size_t grayCapacity;
@@ -74,3 +77,5 @@ bool callValue(VM* vm, Value callee, size_t argCount);
 bool invoke(VM* vm, ObjString* name, int argCount);
 
 Value peek(VM* vm, int distance);
+
+bool throwException(VM* vm, char* name, char* reason, ...);

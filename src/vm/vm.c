@@ -12,6 +12,7 @@
 #include <natives/string.h>
 #include <natives/objectNative.h>
 #include <natives/iterator.h>
+#include <natives/exception.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -61,20 +62,26 @@ void initVM(VM* vm, char* name) {
 	vm->importClass = importClass;
 	defineObjectMethods(vm, vm->importClass);
 
-	ObjClass* iteratorClass = newClass(vm, copyString(vm, "<iterator>", 10));
+	ObjClass* iteratorClass = newClass(vm, copyString(vm, "Iterator", 8));
 	vm->iteratorClass = iteratorClass;
 	defineIteratorMethods(vm, vm->iteratorClass);
+	defineObjectMethods(vm, vm->iteratorClass);
+
+	ObjClass* exceptionClass = newClass(vm, copyString(vm, "Exception", 9));
+	vm->exceptionClass = exceptionClass;
+	defineExceptionMethods(vm, vm->exceptionClass);
+	defineObjectMethods(vm, vm->exceptionClass);
 
 	tableSet(vm, &vm->globals, copyString(vm, "Object", 6), OBJ_VAL(vm->objectClass));
 	tableSet(vm, &vm->globals, copyString(vm, "<object>", 8), OBJ_VAL(vm->objectClass)); // Allows super() in classes with no superclass
 	tableSet(vm, &vm->globals, copyString(vm, "Iterator", 8), OBJ_VAL(vm->iteratorClass));
+	tableSet(vm, &vm->globals, copyString(vm, "Exception", 9), OBJ_VAL(vm->exceptionClass));
 
 	tableSet(vm, &vm->globals, copyString(vm, "_NAME", 5), OBJ_VAL(copyString(vm, name, strlen(name))));
 
 	defineGlobalVariables(vm);
 	defineListMethods(vm);
 	defineStringMethods(vm);
-
 }
 
 void resetVM(VM* vm) {
@@ -205,8 +212,8 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 				}
 			}
 			else {
-				runtimeError(vm, "Expected %d or more arguments but got %d.", needed, argCount);
-				return false;
+				pop(vm);
+				return throwException(vm, "ArityException", "Expected %d or more arguments but got %d.", needed, argCount);
 			}
 		}
 
@@ -253,18 +260,18 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 				}
 			}
 			else {
-				runtimeError(vm, "Expected %d arguments but got %d.", closure->function->arity, argCount);
-				return false;
+				pop(vm);
+				return throwException(vm, "ArityException", "Expected %d arguments but got %d.", closure->function->arity, argCount);
 			}
 		}
 	}
 
 	if (vm->frameCount == FRAMES_MAX) {
-		runtimeError(vm, "Stack overflow.");
+		runtimeError(vm, "StackOverflowException: Stack limit reached (%d frames)", FRAMES_MAX);
 		return false;
 	}
 
-	if (vm->frameCount + 1 >= vm->frameSize) {
+	if (vm->frameCount + 1 == vm->frameSize) {
 		int oldCount = vm->frameSize;
 		vm->frameSize = vm->frameSize < 8 ? 8 : vm->frameSize * 2;
 		vm->frames = GROW_ARRAY(vm, CallFrame, vm->frames, oldCount, vm->frameSize);
@@ -275,13 +282,16 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 		vm->stackSize = 256 * vm->frameSize;
 
 		vm->stack = GROW_ARRAY(vm, Value, vm->stack, oldStackSize, vm->stackSize);
+		vm->stackTop = &vm->stack[stackHeadDistance];
 	}
 
 	CallFrame* frame = &vm->frames[vm->frameCount++];
 	frame->closure = closure;
 	frame->ip = closure->function->chunk.code;
+	frame->isTry = false;
 
 	frame->slots = vm->stackTop - expected - 1;
+	vm->frame = frame;
 	return true;
 }
 
@@ -307,8 +317,9 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 					return call(vm, AS_CLOSURE(initalizer), argCount);
 				}
 				else if (argCount != 0) {
-					runtimeError(vm, "Expected 0 arguments but got %d.", argCount);
-					return false;
+					pop(vm);
+					pop(vm);
+					return throwException(vm, "ArityException", "Expected 0 arguments but got %d.", argCount);
 				}
 
 				return true;
@@ -327,8 +338,8 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 				ObjNative* obj = AS_NATIVE_OBJ(callee);
 				if (argCount != obj->arity) {
 					if (!(obj->varArgs && argCount > obj->arity)) {
-						runtimeError(vm, "Expected %d arguments but got %d.", obj->arity, argCount);
-						return false;
+						pop(vm);
+						return throwException(vm, "ArityException", "Expected %d arguments but got %d.", obj->arity, argCount);
 					}
 				}
 
@@ -337,6 +348,7 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 				Value result = native(vm, argCount, vm->stackTop - argCount, obj->isBound ? &obj->bound : NULL, &hasError);
 				vm->stackTop -= argCount + 1;
 				push(vm, result);
+
 				return !hasError;
 			}
 
@@ -345,9 +357,8 @@ bool callValue(VM* vm, Value callee, size_t argCount) {
 				break;
 		}
 	}
-
-	runtimeError(vm, "Can only call functions and classes.");
-	return false;
+	pop(vm);
+	return throwException(vm, "InvalidOperationException", "Can only call functions and classes.");
 }
 
 static ObjUpvalue* captureUpvalue(VM* vm, Value* local) {
@@ -398,7 +409,6 @@ static void defineMethod(VM* vm, ObjString* name) {
 static bool bindMethod(VM* vm, ObjClass* klass, ObjString* name) {
 	Value method;
 	if (!tableGet(&klass->methods, name, &method)) {
-		runtimeError(vm, "Undefined property '%s'.", name->chars);
 		return false;
 	}
 
@@ -411,8 +421,9 @@ static bool bindMethod(VM* vm, ObjClass* klass, ObjString* name) {
 static bool invokeFromClass(VM* vm, ObjInstance* instance, ObjClass* klass, ObjString* name, size_t argCount) {
 	Value method;
 	if (!tableGet(&klass->methods, name, &method)) {
-		runtimeError(vm, "Undefined property '%s'.", name->chars);
-		return false;
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "UndefinedPropertyException", "Undefined property '%s'.", name->chars);
 	}
 
 	if (IS_NATIVE(method)) {
@@ -422,6 +433,119 @@ static bool invokeFromClass(VM* vm, ObjInstance* instance, ObjClass* klass, ObjS
 		return callValue(vm, OBJ_VAL(native), argCount);
 	}
 	return call(vm, AS_CLOSURE(method), argCount);
+}
+
+static bool throwGeneral(VM* vm, ObjInstance* throwee) {
+	Table* fields = &throwee->fields;
+	push(vm, OBJ_VAL(throwee));
+	tableSet(vm, fields, copyString(vm, "filename", 8), OBJ_VAL(copyString(vm, vm->filename, strlen(vm->filename))));
+
+	ObjFunction* function = vm->frame->closure->function;
+
+	size_t instruction = vm->frame->ip - function->chunk.code - 1;
+
+	size_t line = getLine(&function->chunk.table, instruction);
+
+	tableSet(vm, fields, copyString(vm, "line", 4), NUMBER_VAL(line));
+
+	ValueArray stackTrace;
+	initValueArray(&stackTrace);
+
+	while (!vm->frame->isTry) {
+		Value result = pop(vm);
+
+		closeUpvalues(vm, vm->frame->slots);
+
+		function = vm->frame->closure->function;
+
+		instruction = vm->frame->ip - function->chunk.code - 1;
+
+		line = getLine(&function->chunk.table, instruction);
+
+		// In form:
+		// [%d] in %s <- line, function name
+		int lineNumberLength = snprintf(NULL, 0, "%d", line);
+		size_t lineLength = 1 + lineNumberLength + 1 + 4 + (function->name == NULL ? 8 : function->name->length);
+		char* str = malloc(lineLength + 1);
+		sprintf(str, "[%d] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
+
+		writeValueArray(vm, &stackTrace, OBJ_VAL(takeString(vm, str, lineLength)));
+
+		vm->frameCount--;
+		if (vm->frameCount == 0) {
+			pop(vm);
+
+			Value value;
+			char* valueString = "\0";
+			if (tableGet(fields, copyString(vm, "value", 5), &value)) {
+				valueString = valueToString(vm, value);
+			}
+
+			Value name;
+			char* nameString = NULL;
+			if (tableGet(fields, copyString(vm, "name", 4), &name)) {
+				nameString = valueToString(vm, name);
+			}
+
+			fprintf(stderr, "%s: %s\nIn file %s:\n", nameString == NULL ? "Exception" : nameString, valueString, vm->filename);
+
+			for (size_t i = 0; i < stackTrace.count; i++) {
+				fprintf(stderr, "%s\n", AS_CSTRING(stackTrace.values[i]));
+			}
+
+			return false;
+		}
+
+		vm->stackTop = vm->frame->slots;
+		push(vm, result);
+
+		vm->frame = &vm->frames[vm->frameCount - 1];
+	}
+
+	// Append last call (the one inside the try block)
+	function = vm->frame->closure->function;
+
+	instruction = vm->frame->ip - function->chunk.code - 1;
+
+	line = getLine(&function->chunk.table, instruction);
+
+	// In form:
+	// [%d] in %s <- line, function name
+	int lineNumberLength = snprintf(NULL, 0, "%d", line);
+	size_t lineLength = 1 + lineNumberLength + 1 + 4 + (function->name == NULL ? 8 : function->name->length);
+	char* str = malloc(lineLength + 1);
+	sprintf(str, "[%d] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
+
+	writeValueArray(vm, &stackTrace, OBJ_VAL(takeString(vm, str, lineLength)));
+
+
+	ObjList* stackTraceList = newList(vm, stackTrace);
+
+	tableSet(vm, fields, copyString(vm, "stack", 5), OBJ_VAL(stackTraceList));
+
+	vm->frame->isTry = false;
+	vm->frame->ip = vm->frame->catchJump;
+
+	return true;
+}
+
+bool throwException(VM* vm, char* name, char* reason, ...) {
+
+	va_list args;
+	va_start(args, reason);
+	int length = vsnprintf(NULL, 0, reason, args);
+	char* value = malloc(length + 1);
+	vsprintf(value, reason, args);
+	va_end(args);
+
+	ObjInstance* inst = newInstance(vm, vm->exceptionClass);
+
+	Table* fields = &inst->fields;
+
+	tableSet(vm, fields, copyString(vm, "value", 5), OBJ_VAL(takeString(vm, value, strlen(value))));
+	tableSet(vm, fields, copyString(vm, "name", 4), OBJ_VAL(copyString(vm, name, strlen(name))));
+
+	return throwGeneral(vm, inst);
 }
 
 bool invoke(VM* vm, ObjString* name, int argCount) {
@@ -446,10 +570,9 @@ bool invoke(VM* vm, ObjString* name, int argCount) {
 			native->bound = receiver;
 			return callValue(vm, OBJ_VAL(native), argCount);
 		}
-
-		runtimeError(vm, "Unknown list method.");
-		return false;
-
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "UndefinedPropertyException", "Undefined list method.");
 	}
 	else if (IS_STRING(receiver)) {
 		Value value;
@@ -461,12 +584,14 @@ bool invoke(VM* vm, ObjString* name, int argCount) {
 			return callValue(vm, OBJ_VAL(native), argCount);
 		}
 
-		runtimeError(vm, "Unknown string method.");
-		return false;
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "UndefinedPropertyException", "Undefined string method.");
 	}
 	else {
-		runtimeError(vm, "Only instances have methods.");
-		return false;
+		pop(vm);
+		pop(vm);
+		return throwException(vm, "InvalidOperationException", "Only instances have properties.");
 	}
 }
 
@@ -489,8 +614,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			break; \
 	   } \
 	  if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) { \
-		runtimeError(vm, "Operands must be numbers."); \
-		return STATUS_RUNTIME_ERR; \
+		pop(vm); \
+		pop(vm); \
+		if(!throwException(vm, "InvalidOperationException", "Operands must be numbers.")) return STATUS_RUNTIME_ERR;\
+		break;\
 	  } \
 	  double b = AS_NUMBER(pop(vm)); \
 	  double a = AS_NUMBER(pop(vm)); \
@@ -507,8 +634,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			break; \
 	   } \
 	  if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) { \
-		runtimeError(vm, "Operands must be numbers."); \
-		return STATUS_RUNTIME_ERR; \
+		pop(vm); \
+		pop(vm); \
+		if(!throwException(vm, "InvalidOperationException", "Operands must be numbers.")) return STATUS_RUNTIME_ERR;\
+		break;\
 	  } \
 	  int64_t b = (int64_t) AS_NUMBER(pop(vm)); \
 	  int64_t a = (int64_t) AS_NUMBER(pop(vm)); \
@@ -589,8 +718,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Operand must be a number.");
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "InvalidOperationException", "Operand must be a number.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				push(vm, NUMBER_VAL(-pop(vm).number));
@@ -608,8 +738,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Operand must be a number.");
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "InvalidOperationException", "Operand must be a number.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				int64_t integer = (int64_t)pop(vm).number;
@@ -632,8 +763,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					break;
 				}
 				if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) {
-					runtimeError(vm, "Operands must be numbers.");
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					pop(vm);
+					if (!throwException(vm, "InvalidOperationException", "Operands must be a numbers.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 				uint64_t b = (uint64_t)AS_NUMBER(pop(vm));
 				uint64_t a = (uint64_t)AS_NUMBER(pop(vm));
@@ -740,16 +873,16 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 				else if (IS_STRING(b)) {
 					if (!IS_STRING(a)) {
-						runtimeError(vm, "Can only test for strings within strings.");
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "InvalidOperationException", "Can only test for strings within strings.")) return STATUS_RUNTIME_ERR;
+						break;
 					}
 					char* string = AS_CSTRING(b);
 					char* needle = AS_CSTRING(a);
 					push(vm, BOOL_VAL(strstr(string, needle) != NULL));
 				}
 				else {
-					runtimeError(vm, "Right hand operator must be iterable.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Right hand operator must be iterable.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 			
 				break;
@@ -763,8 +896,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					double da = AS_NUMBER(a);
 					double db = AS_NUMBER(b);
 					if (ceil(da) != da || ceil(db) != db) {
-						runtimeError(vm, "Operands must be integers.");
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "InvalidOperationException", "Operands must be integers.")) return STATUS_RUNTIME_ERR;
+						break;
 					}
 					int64_t ia = (int64_t)da;
 					int64_t ib = (int64_t)db;
@@ -787,8 +920,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					push(vm, OBJ_VAL(newList(vm, array)));
 				}
 				else {
-					runtimeError(vm, "Operands must be numbers.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Operands must be numbers.")) return STATUS_RUNTIME_ERR;
 				}
 
 				break;
@@ -805,8 +937,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Operand must be a number.");
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "InvalidOperationException", "Operand must be a number.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				push(vm, NUMBER_VAL(AS_NUMBER(pop(vm)) + 1));
@@ -825,8 +958,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Operand must be a number.");
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "InvalidOperationException", "Operand must be a number.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				push(vm, NUMBER_VAL(AS_NUMBER(pop(vm)) - 1));
@@ -845,8 +979,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* name = READ_STRING();
 				if (tableSet(vm, &vm->globals, name, peek(vm, 0))) {
 					tableDelete(&vm->globals, name);
-					runtimeError(vm, "Undefined variable '%s'.", name->chars);
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "UndefinedVariableException", "Undefined variable '%s'.", name->chars)) return STATUS_RUNTIME_ERR;
+					break;
 				}
 				break;
 			}
@@ -855,8 +990,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* name = READ_STRING();
 				Value value;
 				if (!tableGet(&vm->globals, name, &value)) {
-					runtimeError(vm, "Undefined variable '%s'.", name->chars);
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "UndefinedVariableException", "Undefined variable '%s'.", name->chars)) return STATUS_RUNTIME_ERR;
+					break;
 				}
 				push(vm, value);
 				break;
@@ -904,6 +1039,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_RUNTIME_ERR;
 				}
 				vm->frame = &vm->frames[vm->frameCount - 1];
+
 				break;
 			}
 
@@ -931,6 +1067,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					return STATUS_RUNTIME_ERR;
 				}
 				vm->frame = &vm->frames[vm->frameCount - 1];
+
 				break;
 			}
 
@@ -959,8 +1096,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 			case OP_INHERIT: {
 				Value superclass = peek(vm, 1);
 				if (!IS_CLASS(superclass)) {
-					runtimeError(vm, "Superclass must be a class.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidInheritanceException", "Superclass must be a class.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				ObjClass* subclass = AS_CLASS(peek(vm, 0));
@@ -973,7 +1110,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* name = READ_STRING();
 				ObjClass* superclass = AS_CLASS(pop(vm));
 				if (!bindMethod(vm, superclass, name)) {
-					return STATUS_RUNTIME_ERR;
+					pop(vm);
+					if (!throwException(vm, "UndefinedPropertyException", "Undefined Property '%s'", name->chars)) return STATUS_RUNTIME_ERR;
 				}
 				break;
 			}
@@ -1012,7 +1150,10 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 						break;
 					}
 					if (!bindMethod(vm, instance->class, name)) {
-						return STATUS_RUNTIME_ERR;
+						pop(vm);
+						pop(vm);
+						if(!throwException(vm, "UndefinedPropertyException", "Undefined Property '%s'", name->chars)) return STATUS_RUNTIME_ERR;
+						break;
 					}
 					break;
 				}
@@ -1039,15 +1180,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				else {
-					runtimeError(vm, "Only instances can contain properties.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Only instances can contain properties.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 			}
 
 			case OP_SET_PROPERTY: {
 				if (!IS_INSTANCE(peek(vm, 1))) {
-					runtimeError(vm, "Only instances can contain properties.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Only instances can contain properties.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
@@ -1083,8 +1224,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
 
 					if (!IS_STRING(peek(vm, 0))) {
-						runtimeError(vm, "Can only index instances using strings.");
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "InvalidIndexException", "Can only index an instance using a string.")) return STATUS_RUNTIME_ERR;
+						break;
 					}
 
 					ObjString* name = AS_STRING(pop(vm));
@@ -1096,7 +1237,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 						break;
 					}
 					if (!bindMethod(vm, instance->class, name)) {
-						return STATUS_RUNTIME_ERR;
+						pop(vm);
+						pop(vm);
+						if (!throwException(vm, "UndefinedPropertyException", "Undefined Property '%s'", name->chars)) return STATUS_RUNTIME_ERR;
 					}
 					break;
 
@@ -1106,16 +1249,16 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					ObjString* string = AS_STRING(peek(vm, 1));
 
 					if (!IS_NUMBER(peek(vm, 0)) || ceil(AS_NUMBER(peek(vm, 0))) != AS_NUMBER(peek(vm, 0))) {
-						runtimeError(vm, "Can only index strings using integers.");
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "InvalidIndexException", "Can only index strings using an integer.")) return STATUS_RUNTIME_ERR;
+						break;
 					}
 
 					double dindex = AS_NUMBER(peek(vm, 0));
 					size_t index = (size_t)dindex;
 
 					if (index >= string->length) {
-						runtimeError(vm, "Index out of bounds.");
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "IndexOutOfBoundsException", "Index is larger than string length.")) return STATUS_RUNTIME_ERR;
+						break;
 					}
 
 					Value v = OBJ_VAL(copyString(vm, &string->chars[index], 1));
@@ -1126,23 +1269,23 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				if (!IS_LIST(peek(vm, 1))) {
-					runtimeError(vm, "Can only index into lists.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Can only index into lists.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				ObjList* list = AS_LIST(peek(vm, 1));
 
 				if (!IS_NUMBER(peek(vm, 0)) || ceil(AS_NUMBER(peek(vm, 0))) != AS_NUMBER(peek(vm, 0))) {
-					runtimeError(vm, "Can only index lists using integers.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidIndexException", "Can only index a list using an integer.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				double dindex = AS_NUMBER(peek(vm, 0));
 				size_t index = (size_t)dindex;
 
 				if (index >= list->items.count) {
-					runtimeError(vm, "Index out of bounds.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "IndexOutOfBoundsException", "Index is larger than list length.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				Value v = list->items.values[index];
@@ -1159,8 +1302,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					ObjInstance* instance = AS_INSTANCE(peek(vm, 2));
 
 					if (!IS_STRING(peek(vm, 1))) {
-						runtimeError(vm, "Can only index instances using strings.");
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "InvalidIndexException", "Can only index an instance using a string.")) return STATUS_RUNTIME_ERR;
+						break;
 					}
 
 					ObjString* name = AS_STRING(peek(vm, 1));
@@ -1177,23 +1320,23 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 
 				if (!IS_LIST(peek(vm, 2))) {
-					runtimeError(vm, "Can only index into lists.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Can only index into lists.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				ObjList* list = AS_LIST(peek(vm, 2));
 
 				if (!IS_NUMBER(peek(vm, 1)) || ceil(AS_NUMBER(peek(vm, 1))) != AS_NUMBER(peek(vm, 1))) {
-					runtimeError(vm, "Can only index lists using integers.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidIndexException", "Can only index a list using an integer.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				double dindex = AS_NUMBER(peek(vm, 1));
 				size_t index = (size_t)dindex;
 
 				if (index >= list->items.count) {
-					runtimeError(vm, "Index out of bounds.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "IndexOutOfBoundsException", "Index is larger than list length.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 
 				Value v = pop(vm);
@@ -1248,9 +1391,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					}
 
 					else {
-						runtimeError(vm, "Could not find import '%s'", path->chars);
 						free(string);
-						return STATUS_RUNTIME_ERR;
+						if (!throwException(vm, "InvalidImportException", "Could not find import '%s'.", path->chars)) return STATUS_RUNTIME_ERR;
+						break;
 					}
 				}
 
@@ -1311,9 +1454,9 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 						}
 
 						else {
-							runtimeError(vm, "Could not find import '%s'", path->chars);
 							free(string);
-							return STATUS_RUNTIME_ERR;
+							if (!throwException(vm, "InvalidImportException", "Could not find import '%s'.", path->chars)) return STATUS_RUNTIME_ERR;
+							break;
 						}
 					}
 
@@ -1357,8 +1500,8 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				Value a = pop(vm);
 
 				if (!IS_CLASS(b)) {
-					runtimeError(vm, "Right hand operand of an implements clause must be a class.");
-					return STATUS_RUNTIME_ERR;
+					if (!throwException(vm, "InvalidOperationException", "Right hand operand of an implements clause must be a class.")) return STATUS_RUNTIME_ERR;
+					break;
 				}
 				if (!IS_INSTANCE(a)) {
 					push(vm, BOOL_VAL(false));
@@ -1387,6 +1530,35 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				break;
 			}
 
+			case OP_THROW: {
+				Value throwee = pop(vm);
+
+				if(!IS_INSTANCE(throwee)) {
+					ObjInstance* inst = newInstance(vm, vm->exceptionClass);
+
+					tableSet(vm, &inst->fields, copyString(vm, "value", 5), throwee);
+
+					throwee = OBJ_VAL(inst);
+				}
+				if (!throwGeneral(vm, AS_INSTANCE(throwee))) return STATUS_RUNTIME_ERR;
+
+				break;
+			}
+
+			case OP_TRY_BEGIN: {
+				uint16_t catchLocation = READ_SHORT();
+
+				vm->frame->isTry = true;
+				vm->frame->catchJump = vm->frame->ip + catchLocation;
+				
+				break;
+			}
+
+			case OP_TRY_END: {
+				vm->frame->isTry = false;
+				break;
+			}
+
 			case OP_RETURN: {
 				Value result = pop(vm);
 
@@ -1402,6 +1574,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				push(vm, result);
 
 				vm->frame = &vm->frames[vm->frameCount - 1];
+
 				break;
 			}
 		}
@@ -1474,9 +1647,11 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 
 	vm->filepath = takeString(vm, filepath, filepathIndex);
 
-	char* source = readFile(path);
-	if (source == NULL) { 
-		fprintf(stderr, "\n");
+	File file = readFile(path);
+	char* source = file.contents;
+	if (file.isError) { 
+		fprintf(stderr, "%s\n", file.contents);
+		free(file.contents);
 		return STATUS_RUNTIME_ERR; 
 	}
 

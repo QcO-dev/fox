@@ -161,7 +161,7 @@ static void markRoots(VM* vm) {
 		markValue(vm, *slot);
 	}
 
-	for (int i = 0; i < vm->frameCount; i++) {
+	for (size_t i = 0; i < vm->frameCount; i++) {
 		markObject(vm, (Obj*)vm->frames[i].closure);
 	}
 
