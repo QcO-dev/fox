@@ -965,7 +965,53 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 		setOp = OP_SET_GLOBAL;
 	}
 
-	if (canAssign && match(parser, TOKEN_EQUAL)) {
+	if (canAssign && match(parser, TOKEN_COMMA)) {
+		int names[256];
+		uint8_t setOps[256];
+		names[0] = arg;
+		setOps[0] = setOp;
+		int index = 0;
+
+		do {
+			index++;
+			if (index == 255) error(parser, "Can only destructure 256 variables at once.");
+
+			consume(parser, TOKEN_IDENTIFIER, "Expect variable name.");
+
+			name = parser->previous;
+
+			int var = resolveLocal(parser, compiler, &name);
+			if (var != -1) {
+				setOps[index] = OP_SET_LOCAL;
+			}
+			else if ((var = resolveUpvalue(parser, compiler, &name)) != -1) {
+				setOps[index] = OP_SET_UPVALUE;
+			}
+			else {
+				var = identifierConstant(parser, compiler, &name);
+				setOps[index] = OP_SET_GLOBAL;
+			}
+			names[index] = var;
+
+		} while (match(parser, TOKEN_COMMA));
+
+		if (match(parser, TOKEN_EQUAL)) {
+			expression(parser, compiler);
+
+			int length = index + 1;
+			for (int i = 0; i < length; i++) {
+				emitByte(parser, compiler, OP_DUP);
+				emitConstant(parser, compiler, NUMBER_VAL(i));
+				emitByte(parser, compiler, OP_GET_INDEX);
+
+				emitByte(parser, compiler, setOps[i]);
+				emitByte(parser, compiler, names[i]);
+				emitByte(parser, compiler, OP_POP);
+			}
+		}
+	}
+
+	else if (canAssign && match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
 		emitByte(parser, compiler, setOp);
 		emitByte(parser, compiler, arg);
