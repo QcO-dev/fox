@@ -62,10 +62,11 @@ typedef struct Parser {
 	bool panicMode;
 } Parser;
 
-typedef void (*ParseFn)(Parser* parser, Compiler* compiler, bool canAssign);
+typedef void (*ParseFn)(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure);
 
 typedef enum Precedence {
 	PREC_NONE,
+	PREC_DESTRUCTURE, // x, y <- z x, y = z
 	PREC_ASSIGNMENT,  // =
 	PREC_PIPE,        // x |> y
 	PREC_TERNARY,     // x ? y : z
@@ -108,10 +109,10 @@ static void block(Parser* parser, Compiler* compiler);
 static void defineVariable(Parser* parser, Compiler* compiler, uint8_t global);
 static uint8_t parseVariable(Parser* parser, Compiler* compiler, const char* errorMessage);
 static uint8_t argumentList(Parser* parser, Compiler* compiler);
-static void variable(Parser* parser, Compiler* compiler, bool canAssign);
-static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign);
-static void and(Parser* parser, Compiler* compiler, bool canAssign);
-static void or(Parser * parser, Compiler * compiler, bool canAssign);
+static void variable(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure);
+static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign, bool canDestructure);
+static void and(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure);
+static void or(Parser * parser, Compiler * compiler, bool canAssign, bool canDestructure);
 
 static Chunk* currentChunk(Compiler* compiler) {
 	return &compiler->function->chunk;
@@ -326,12 +327,13 @@ static void parsePrecedence(Parser* parser, Compiler* compiler, Precedence prece
 	}
 
 	bool canAssign = precedence <= PREC_ASSIGNMENT;
-	prefixRule(parser, compiler, canAssign);
+	bool canDestructure = precedence <= PREC_DESTRUCTURE;
+	prefixRule(parser, compiler, canAssign, canDestructure);
 
 	while (precedence <= getRule(parser->current.type)->precedence) {
 		advance(parser);
 		ParseFn infixRule = getRule(parser->previous.type)->infix;
-		infixRule(parser, compiler, canAssign);
+		infixRule(parser, compiler, canAssign, canDestructure);
 	}
 
 	if (canAssign && (match(parser, TOKEN_EQUAL) || isAssignment(parser))) {
@@ -340,12 +342,12 @@ static void parsePrecedence(Parser* parser, Compiler* compiler, Precedence prece
 
 }
 
-static void number(Parser* parser, Compiler* compiler, bool canAssign) {
+static void number(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	double value = strtod(parser->previous.start, NULL);
 	emitConstant(parser, compiler, NUMBER_VAL(value));
 }
 
-static void unary(Parser* parser, Compiler* compiler, bool canAssign) {
+static void unary(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	TokenType operatorType = parser->previous.type;
 
 	// Compile the operand.
@@ -362,7 +364,7 @@ static void unary(Parser* parser, Compiler* compiler, bool canAssign) {
 	}
 }
 
-static void binary(Parser* parser, Compiler* compiler, bool canAssign) {
+static void binary(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	TokenType operatorType = parser->previous.type;
 
 	// Compile the right operand.
@@ -396,7 +398,7 @@ static void binary(Parser* parser, Compiler* compiler, bool canAssign) {
 	}
 }
 
-static void grouping(Parser* parser, Compiler* compiler, bool canAssign) {
+static void grouping(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	expression(parser, compiler);
 	consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
@@ -405,12 +407,12 @@ static void expression(Parser* parser, Compiler* compiler) {
 	parsePrecedence(parser, compiler, PREC_ASSIGNMENT);
 }
 
-static void range(Parser* parser, Compiler* compiler, bool canAssign) {
+static void range(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	expression(parser, compiler);
 	emitByte(parser, compiler, OP_RANGE);
 }
 
-static void literal(Parser* parser, Compiler* compiler, bool canAssign) {
+static void literal(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	switch (parser->previous.type) {
 		case TOKEN_FALSE: emitByte(parser, compiler, OP_FALSE); break;
 		case TOKEN_NULL: emitByte(parser, compiler, OP_NULL); break;
@@ -464,7 +466,7 @@ static void replaceEscapes(char at[], char bt[]) {
 	*at = '\0';
 }
 
-static void string(Parser* parser, Compiler* compiler, bool canAssign) {
+static void string(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	char* dest = malloc(parser->previous.length - 1);
 
 	memcpy(dest, parser->previous.start + 1, parser->previous.length - 2);
@@ -482,7 +484,7 @@ static void string(Parser* parser, Compiler* compiler, bool canAssign) {
 	free(nullString);
 }
 
-static void list(Parser* parser, Compiler* compiler, bool canAssign) {
+static void list(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	uint8_t itemCount = 0;
 	if (parser->current.type != TOKEN_RIGHT_SQBR) {
 		do {
@@ -502,7 +504,7 @@ static void list(Parser* parser, Compiler* compiler, bool canAssign) {
 	emitByte(parser, compiler, itemCount);
 }
 
-static void object(Parser* parser, Compiler* compiler, bool canAssign) {
+static void object(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 
 	emitByte(parser, compiler, OP_OBJECT);
 	emitByte(parser, compiler, OP_CALL);
@@ -528,7 +530,7 @@ static void object(Parser* parser, Compiler* compiler, bool canAssign) {
 	consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after object body.");
 }
 
-static void objectClass(Parser* parser, Compiler* compiler, bool canAssign) {
+static void objectClass(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	emitByte(parser, compiler, OP_CALL);
 	emitByte(parser, compiler, 0);
 
@@ -552,15 +554,15 @@ static void objectClass(Parser* parser, Compiler* compiler, bool canAssign) {
 	consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after object body.");
 }
 
-static void this(Parser* parser, Compiler* compiler, bool canAssign) {
+static void this(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	if (parser->currentClass == NULL) {
 		error(parser, "Can't use 'this' outside of a class.");
 		return;
 	}
-	variable(parser, compiler, false);
+	variable(parser, compiler, false, false);
 }
 
-static void lambda(Parser* parser, Compiler* c, bool canAssign) {
+static void lambda(Parser* parser, Compiler* c, bool canAssign, bool canDestructure) {
 	Compiler compiler;
 	initCompiler(&compiler, c, parser->vm, parser, TYPE_FUNCTION);
 	beginScope(&compiler);
@@ -612,7 +614,7 @@ static void lambda(Parser* parser, Compiler* c, bool canAssign) {
 	}
 }
 
-static void lambdaOr(Parser* parser, Compiler* c, bool canAssign) {
+static void lambdaOr(Parser* parser, Compiler* c, bool canAssign, bool canDestructure) {
 	Compiler compiler;
 	initCompiler(&compiler, c, parser->vm, parser, TYPE_FUNCTION);
 	beginScope(&compiler);
@@ -642,7 +644,7 @@ static void lambdaOr(Parser* parser, Compiler* c, bool canAssign) {
 	}
 }
 
-static void and(Parser* parser, Compiler* compiler, bool canAssign) {
+static void and(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	int endJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
 
 	emitByte(parser, compiler, OP_POP);
@@ -651,7 +653,7 @@ static void and(Parser* parser, Compiler* compiler, bool canAssign) {
 	patchJump(parser, compiler, endJump);
 }
 
-static void or(Parser* parser, Compiler* compiler, bool canAssign) {
+static void or(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	int elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
 	int endJump = emitJump(parser, compiler, OP_JUMP);
 
@@ -662,7 +664,7 @@ static void or(Parser* parser, Compiler* compiler, bool canAssign) {
 	patchJump(parser, compiler, endJump);
 }
 
-static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
+static void dot(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'.");
 	uint8_t name = identifierConstant(parser, compiler, &parser->previous);
 
@@ -733,7 +735,7 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign) {
 	}
 }
 
-static void ternary(Parser* parser, Compiler* compiler, bool canAssign) {
+static void ternary(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	int elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	expression(parser, compiler); // true value
 	int trueJump = emitJump(parser, compiler, OP_JUMP);
@@ -747,7 +749,7 @@ static void ternary(Parser* parser, Compiler* compiler, bool canAssign) {
 	patchJump(parser, compiler, trueJump);
 }
 
-static void pipe(Parser* parser, Compiler* compiler, bool canAssign) {
+static void pipe(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	// The compiler will stop this route at another |>
 	// This lets it add the below instructions for each one.
 	parsePrecedence(parser, compiler, PREC_PIPE + 1);
@@ -756,7 +758,7 @@ static void pipe(Parser* parser, Compiler* compiler, bool canAssign) {
 	emitByte(parser, compiler, 1);
 }
 
-static void super(Parser* parser, Compiler* compiler, bool canAssign) {
+static void super(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 
 	if (parser->currentClass == NULL) {
 		error(parser, "Can't use 'super' outside of a class.");
@@ -768,10 +770,10 @@ static void super(Parser* parser, Compiler* compiler, bool canAssign) {
 	if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t name = identifierConstant(parser, compiler, &parser->currentClass->superclass);
 
-		namedVariable(parser, compiler, syntheticToken("this"), false);
+		namedVariable(parser, compiler, syntheticToken("this"), false, false);
 
 		uint8_t argCount = argumentList(parser, compiler);
-		namedVariable(parser, compiler, syntheticToken("super"), false);
+		namedVariable(parser, compiler, syntheticToken("super"), false, false);
 		emitByte(parser, compiler, OP_SUPER_INVOKE);
 		emitByte(parser, compiler, name);
 		emitByte(parser, compiler, argCount);
@@ -783,29 +785,29 @@ static void super(Parser* parser, Compiler* compiler, bool canAssign) {
 	consume(parser, TOKEN_IDENTIFIER, "Expect superclass method name.");
 	uint8_t name = identifierConstant(parser, compiler, &parser->previous);
 
-	namedVariable(parser, compiler, syntheticToken("this"), false);
+	namedVariable(parser, compiler, syntheticToken("this"), false, false);
 
 	if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t argCount = argumentList(parser, compiler);
-		namedVariable(parser, compiler, syntheticToken("super"), false);
+		namedVariable(parser, compiler, syntheticToken("super"), false, false);
 		emitByte(parser, compiler, OP_SUPER_INVOKE);
 		emitByte(parser, compiler, name);
 		emitByte(parser, compiler, argCount);
 	}
 	else {
-		namedVariable(parser, compiler, syntheticToken("super"), false);
+		namedVariable(parser, compiler, syntheticToken("super"), false, false);
 		emitByte(parser, compiler, OP_GET_SUPER);
 		emitByte(parser, compiler, name);
 	}
 }
 
-static void call(Parser* parser, Compiler* compiler, bool canAssign) {
+static void call(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	uint8_t argCount = argumentList(parser, compiler);
 	emitByte(parser, compiler, OP_CALL);
 	emitByte(parser, compiler, argCount);
 }
 
-static void index(Parser* parser, Compiler* compiler, bool canAssign) {
+static void index(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
 	expression(parser, compiler);
 	consume(parser, TOKEN_RIGHT_SQBR, "Expected ']' after index.");
 	if (canAssign && match(parser, TOKEN_EQUAL)) {
@@ -947,7 +949,7 @@ static int resolveUpvalue(Parser* parser, Compiler* compiler, Token* name) {
 	return -1;
 }
 
-static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign) {
+static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign, bool canDestructure) {
 
 	uint8_t getOp, setOp;
 	int arg = resolveLocal(parser, compiler, &name);
@@ -965,7 +967,7 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 		setOp = OP_SET_GLOBAL;
 	}
 
-	if (canAssign && match(parser, TOKEN_COMMA)) {
+	if (canDestructure && match(parser, TOKEN_COMMA)) {
 		int names[256];
 		uint8_t setOps[256];
 		uint8_t tokenNames[256];
@@ -1078,12 +1080,12 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 	}
 }
 
-static void variable(Parser* parser, Compiler* compiler, bool canAssign) {
-	namedVariable(parser, compiler, parser->previous, canAssign);
+static void variable(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
+	namedVariable(parser, compiler, parser->previous, canAssign, canDestructure);
 }
 
 static void expressionStatement(Parser* parser, Compiler* compiler) {
-	expression(parser, compiler);
+	parsePrecedence(parser, compiler, PREC_DESTRUCTURE);
 	consume(parser, TOKEN_SEMICOLON, "Expect ';' after expression.");
 	emitByte(parser, compiler, OP_POP);
 }
@@ -1799,7 +1801,7 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 
 	if (match(parser, TOKEN_EXTENDS)) {
 		consume(parser, TOKEN_IDENTIFIER, "Expected superclass name.");
-		variable(parser, compiler, false);
+		variable(parser, compiler, false, false);
 
 		if (identifiersEqual(&className, &parser->previous)) {
 			error(parser, "A class can't inherit from itself.");
@@ -1811,7 +1813,7 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 		addLocal(parser, compiler, syntheticToken("super"));
 		defineVariable(parser, compiler, 0);
 
-		namedVariable(parser, compiler, className, false);
+		namedVariable(parser, compiler, className, false, false);
 		emitByte(parser, compiler, OP_INHERIT);
 		classCompiler.hasSuperclass = true;
 	}
@@ -1824,7 +1826,7 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 		addLocal(parser, compiler, syntheticToken("super"));
 		defineVariable(parser, compiler, 0);
 
-		namedVariable(parser, compiler, className, false);
+		namedVariable(parser, compiler, className, false, false);
 		emitByte(parser, compiler, OP_INHERIT);
 		classCompiler.hasSuperclass = true;
 	}
@@ -1832,18 +1834,18 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 	if (match(parser, TOKEN_IMPLEMENTS)) {
 		do {
 			consume(parser, TOKEN_IDENTIFIER, "Expected class name to implement.");
-			variable(parser, compiler, false);
+			variable(parser, compiler, false, false);
 
 			if (identifiersEqual(&className, &parser->previous)) {
 				error(parser, "A class can't inherit from itself.");
 			}
 
-			namedVariable(parser, compiler, className, false);
+			namedVariable(parser, compiler, className, false, false);
 			emitByte(parser, compiler, OP_INHERIT);
 		} while (match(parser, TOKEN_COMMA));
 	}
 
-	namedVariable(parser, compiler, className, false);
+	namedVariable(parser, compiler, className, false, false);
 
 	consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before class body.");
 
