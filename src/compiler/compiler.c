@@ -968,8 +968,10 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 	if (canAssign && match(parser, TOKEN_COMMA)) {
 		int names[256];
 		uint8_t setOps[256];
+		uint8_t tokenNames[256];
 		names[0] = arg;
 		setOps[0] = setOp;
+		tokenNames[0] = identifierConstant(parser, compiler, &name);
 		int index = 0;
 
 		do {
@@ -992,6 +994,7 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 				setOps[index] = OP_SET_GLOBAL;
 			}
 			names[index] = var;
+			tokenNames[index] = identifierConstant(parser, compiler, &name);
 
 		} while (match(parser, TOKEN_COMMA));
 
@@ -1009,6 +1012,24 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 				emitByte(parser, compiler, OP_POP);
 			}
 		}
+		else if (match(parser, TOKEN_REV_ARROW)) {
+			expression(parser, compiler);
+
+			int count = index + 1;
+			for (int i = 0; i < count; i++) {
+				emitByte(parser, compiler, OP_DUP);
+				emitByte(parser, compiler, OP_GET_PROPERTY);
+				emitByte(parser, compiler, tokenNames[i]);
+
+				emitByte(parser, compiler, setOps[i]);
+				emitByte(parser, compiler, names[i]);
+				emitByte(parser, compiler, OP_POP);
+			}
+		}
+		else {
+			error(parser, "Expected destructure assignment ('=' or '<-').");
+		}
+		
 	}
 
 	else if (canAssign && match(parser, TOKEN_EQUAL)) {
