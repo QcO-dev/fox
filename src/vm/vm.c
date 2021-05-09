@@ -1223,6 +1223,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 					ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
 
+					Value disgard;
+					if (tableGet(&instance->fields, copyString(vm, "[", 1), &disgard) || tableGet(&instance->class->methods, copyString(vm, "[", 1), &disgard)) {
+						if (!invoke(vm, copyString(vm, "[", 1), 1)) {
+							return STATUS_RUNTIME_ERR;
+						}
+						vm->frame = &vm->frames[vm->frameCount - 1];
+						break;
+					}
+
 					if (!IS_STRING(peek(vm, 0))) {
 						if (!throwException(vm, "InvalidIndexException", "Can only index an instance using a string.")) return STATUS_RUNTIME_ERR;
 						break;
@@ -1254,14 +1263,31 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					}
 
 					double dindex = AS_NUMBER(peek(vm, 0));
-					size_t index = (size_t)dindex;
 
-					if (index >= string->length) {
+					int index = (int)dindex;
+
+					if (index < 0) {
+						size_t absIndex = -index; // Index will always be negative so negating gives absolute
+						if (absIndex > string->length) {
+							if (!throwException(vm, "IndexOutOfBoundsException", "Absolute index is larger than string length.")) return STATUS_RUNTIME_ERR;
+							break;
+						}
+
+						Value v = OBJ_VAL(copyString(vm, &string->chars[string->length - absIndex], 1));
+						pop(vm);
+						pop(vm);
+						push(vm, v);
+						break;
+					}
+
+					size_t uIndex = (size_t)index;
+
+					if (uIndex >= string->length) {
 						if (!throwException(vm, "IndexOutOfBoundsException", "Index is larger than string length.")) return STATUS_RUNTIME_ERR;
 						break;
 					}
 
-					Value v = OBJ_VAL(copyString(vm, &string->chars[index], 1));
+					Value v = OBJ_VAL(copyString(vm, &string->chars[uIndex], 1));
 					pop(vm);
 					pop(vm);
 					push(vm, v);
@@ -1281,14 +1307,30 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				double dindex = AS_NUMBER(peek(vm, 0));
-				size_t index = (size_t)dindex;
+				int index = (int)dindex;
 
-				if (index >= list->items.count) {
+				if (index < 0) {
+					size_t absIndex = -index; // Index will always be negative so negating gives absolute
+					if (absIndex > list->items.count) {
+						if (!throwException(vm, "IndexOutOfBoundsException", "Absolute index is larger than list length.")) return STATUS_RUNTIME_ERR;
+						break;
+					}
+
+					Value v = list->items.values[list->items.count - absIndex];
+					pop(vm);
+					pop(vm);
+					push(vm, v);
+					break;
+				}
+
+				size_t uIndex = (size_t)index;
+
+				if (uIndex >= list->items.count) {
 					if (!throwException(vm, "IndexOutOfBoundsException", "Index is larger than list length.")) return STATUS_RUNTIME_ERR;
 					break;
 				}
 
-				Value v = list->items.values[index];
+				Value v = list->items.values[uIndex];
 				pop(vm);
 				pop(vm);
 				push(vm, v);
@@ -1300,6 +1342,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				if (IS_INSTANCE(peek(vm, 2))) {
 
 					ObjInstance* instance = AS_INSTANCE(peek(vm, 2));
+
+					Value disgard;
+					if (tableGet(&instance->fields, copyString(vm, "[", 1), &disgard) || tableGet(&instance->class->methods, copyString(vm, "[", 1), &disgard)) {
+						if (!invoke(vm, copyString(vm, "[", 1), 2)) {
+							return STATUS_RUNTIME_ERR;
+						}
+						vm->frame = &vm->frames[vm->frameCount - 1];
+						break;
+					}
 
 					if (!IS_STRING(peek(vm, 1))) {
 						if (!throwException(vm, "InvalidIndexException", "Can only index an instance using a string.")) return STATUS_RUNTIME_ERR;
@@ -1332,19 +1383,36 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				double dindex = AS_NUMBER(peek(vm, 1));
-				size_t index = (size_t)dindex;
 
-				if (index >= list->items.count) {
+				int index = (int)dindex;
+
+				if (index < 0) {
+					size_t absIndex = -index; // Index will always be negative so negating gives absolute
+					if (absIndex > list->items.count) {
+						if (!throwException(vm, "IndexOutOfBoundsException", "Absolute index is larger than list length.")) return STATUS_RUNTIME_ERR;
+						break;
+					}
+
+					Value v = pop(vm);
+					list->items.values[list->items.count - absIndex] = v;
+					pop(vm);
+					pop(vm);
+					push(vm, v);
+					break;
+				}
+
+				size_t uIndex = (size_t)index;
+
+				if (uIndex >= list->items.count) {
 					if (!throwException(vm, "IndexOutOfBoundsException", "Index is larger than list length.")) return STATUS_RUNTIME_ERR;
 					break;
 				}
 
 				Value v = pop(vm);
-				list->items.values[index] = v;
+				list->items.values[uIndex] = v;
 				pop(vm);
 				pop(vm);
 				push(vm, v);
-
 				break;
 			}
 

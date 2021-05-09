@@ -315,6 +315,9 @@ Token scanToken(Scanner* scanner) {
 			else if (match(scanner, '=')) {
 				type = TOKEN_LESS_EQUAL;
 			}
+			else if (match(scanner, '-')) {
+				type = TOKEN_REV_ARROW;
+			}
 
 			return makeToken(scanner, type);
 		}
