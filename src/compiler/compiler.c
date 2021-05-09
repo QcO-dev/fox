@@ -1557,6 +1557,36 @@ static uint8_t parseVariable(Parser* parser, Compiler* compiler, const char* err
 static void varDeclaration(Parser* parser, Compiler* compiler) {
 	uint8_t global = parseVariable(parser, compiler, "Expect variable name.");
 
+	if (match(parser, TOKEN_COMMA)) {
+		uint8_t names[256];
+		names[0] = global;
+		uint8_t index = 0;
+
+		do {
+			index++;
+			if (index == 255) error(parser, "Can only destructure 256 variables at once.");
+
+			names[index] = parseVariable(parser, compiler, "Expect variable name.");
+		} while (match(parser, TOKEN_COMMA));
+
+		if (match(parser, TOKEN_EQUAL)) {
+			expression(parser, compiler);
+
+			uint8_t length = index + 1;
+			for (uint8_t i = 0; i < length; i++) {
+				emitByte(parser, compiler, OP_DUP);
+				emitConstant(parser, compiler, NUMBER_VAL(i));
+				emitByte(parser, compiler, OP_GET_INDEX);
+
+				defineVariable(parser, compiler, names[i]);
+			}
+			emitByte(parser, compiler, OP_POP);
+		}
+
+		consume(parser, TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+		return;
+	}
+
 	if (match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
 	}
