@@ -1603,16 +1603,22 @@ static uint8_t parseVariable(Parser* parser, Compiler* compiler, const char* err
 static void varDeclaration(Parser* parser, Compiler* compiler) {
 	uint8_t global = parseVariable(parser, compiler, "Expect variable name.");
 
+	uint8_t name = identifierConstant(parser, compiler, &parser->previous);
+
 	if (match(parser, TOKEN_COMMA)) {
+		uint8_t globals[256];
+		globals[0] = global;
 		uint8_t names[256];
-		names[0] = global;
+		names[0] = name;
+
 		uint8_t index = 0;
 
 		do {
 			index++;
 			if (index == 255) error(parser, "Can only destructure 256 variables at once.");
 
-			names[index] = parseVariable(parser, compiler, "Expect variable name.");
+			globals[index] = parseVariable(parser, compiler, "Expect variable name.");
+			names[index] = identifierConstant(parser, compiler, &parser->previous);
 		} while (match(parser, TOKEN_COMMA));
 
 		if (match(parser, TOKEN_EQUAL)) {
@@ -1621,12 +1627,39 @@ static void varDeclaration(Parser* parser, Compiler* compiler) {
 			uint8_t length = index + 1;
 			for (uint8_t i = 0; i < length; i++) {
 				emitByte(parser, compiler, OP_DUP);
+				
 				emitConstant(parser, compiler, NUMBER_VAL(i));
 				emitByte(parser, compiler, OP_GET_INDEX);
 
-				defineVariable(parser, compiler, names[i]);
+				if (compiler->scopeDepth > 0) { 
+					compiler->locals[compiler->localCount - 1 - i].depth = compiler->scopeDepth;
+					emitByte(parser, compiler, OP_SWAP);
+				}
+				else defineVariable(parser, compiler, globals[i]);
 			}
 			emitByte(parser, compiler, OP_POP);
+		}
+		else if (match(parser, TOKEN_REV_ARROW)) {
+			expression(parser, compiler);
+
+			uint8_t count = index + 1;
+
+			for (uint8_t i = 0; i < count; i++) {
+				emitByte(parser, compiler, OP_DUP);
+
+				emitByte(parser, compiler, OP_GET_PROPERTY);
+				emitByte(parser, compiler, names[i]);
+
+				if (compiler->scopeDepth > 0) {
+					compiler->locals[compiler->localCount - 1 - i].depth = compiler->scopeDepth;
+					emitByte(parser, compiler, OP_SWAP);
+				}
+				else defineVariable(parser, compiler, globals[i]);
+			}
+			emitByte(parser, compiler, OP_POP);
+		}
+		else {
+			error(parser, "Expected destructure assignment ('=' or '<-').");
 		}
 
 		consume(parser, TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
@@ -1990,6 +2023,8 @@ ParseRule rules[] = {
   [TOKEN_IN_BIT_AND] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_BIT_OR] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_XOR] = {NULL, NULL, PREC_NONE},
+  [TOKEN_ARROW] = {NULL, NULL, PREC_NONE},
+  [TOKEN_REV_ARROW] = {NULL, NULL, PREC_NONE},
   [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
   [TOKEN_CATCH] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},

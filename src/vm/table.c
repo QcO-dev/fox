@@ -115,7 +115,6 @@ ObjString* tableFindString(Table* table, const char* chars, size_t length, uint3
 	uint32_t index = hash & table->capacity;
 
 	for (;;) {
-		//TODO what
 
 		Entry* entry = &table->entries[index];
 
