@@ -1223,6 +1223,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 					ObjInstance* instance = AS_INSTANCE(peek(vm, 1));
 
+					Value disgard;
+					if (tableGet(&instance->fields, copyString(vm, "[", 1), &disgard) || tableGet(&instance->class->methods, copyString(vm, "[", 1), &disgard)) {
+						if (!invoke(vm, copyString(vm, "[", 1), 1)) {
+							return STATUS_RUNTIME_ERR;
+						}
+						vm->frame = &vm->frames[vm->frameCount - 1];
+						break;
+					}
+
 					if (!IS_STRING(peek(vm, 0))) {
 						if (!throwException(vm, "InvalidIndexException", "Can only index an instance using a string.")) return STATUS_RUNTIME_ERR;
 						break;
@@ -1333,6 +1342,15 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				if (IS_INSTANCE(peek(vm, 2))) {
 
 					ObjInstance* instance = AS_INSTANCE(peek(vm, 2));
+
+					Value disgard;
+					if (tableGet(&instance->fields, copyString(vm, "[", 1), &disgard) || tableGet(&instance->class->methods, copyString(vm, "[", 1), &disgard)) {
+						if (!invoke(vm, copyString(vm, "[", 1), 2)) {
+							return STATUS_RUNTIME_ERR;
+						}
+						vm->frame = &vm->frames[vm->frameCount - 1];
+						break;
+					}
 
 					if (!IS_STRING(peek(vm, 1))) {
 						if (!throwException(vm, "InvalidIndexException", "Can only index an instance using a string.")) return STATUS_RUNTIME_ERR;
