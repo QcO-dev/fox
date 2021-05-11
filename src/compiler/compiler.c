@@ -118,6 +118,7 @@ static void variable(Parser* parser, Compiler* compiler, bool canAssign, bool ca
 static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign, bool canDestructure);
 static void and(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure);
 static void or(Parser * parser, Compiler * compiler, bool canAssign, bool canDestructure);
+static void pattern(Parser* parser, Compiler* compiler);
 
 static Chunk* currentChunk(Compiler* compiler) {
 	return &compiler->function->chunk;
@@ -818,6 +819,60 @@ static void index(Parser* parser, Compiler* compiler, bool canAssign, bool canDe
 		compiler->lvalue = true;
 		compiler->lvalueSet = OP_SET_INDEX;
 	}
+}
+
+static void switchExpression(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
+	beginScope(compiler);
+
+	consume(parser, TOKEN_LEFT_PAREN, "Expected '(' after switch.");
+
+	expression(parser, compiler);
+
+	consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after switch clause.");
+
+	consume(parser, TOKEN_LEFT_BRACE, "Expected '{' before switch body.");
+
+	int breakSkip = emitJump(parser, compiler, OP_JUMP);
+	int breakJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	patchJump(parser, compiler, breakSkip);
+
+	while (parser->current.type != TOKEN_RIGHT_BRACE && parser->current.type != TOKEN_EOF) {
+		emitByte(parser, compiler, OP_DUP);
+
+		pattern(parser, compiler);
+
+		while (match(parser, TOKEN_COMMA)) {
+			int falseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+			int trueJump = emitJump(parser, compiler, OP_JUMP);
+			patchJump(parser, compiler, falseJump);
+			pattern(parser, compiler);
+			patchJump(parser, compiler, trueJump);
+		}
+
+		int jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+
+		consume(parser, TOKEN_ARROW, "Expected '->' after switch case.");
+
+		expression(parser, compiler);
+
+		consume(parser, TOKEN_SEMICOLON, "Expected ';' after expression.");
+
+		emitByte(parser, compiler, OP_FALSE);
+		emitLoop(parser, compiler, breakJump - 1);
+
+		patchJump(parser, compiler, jump);
+	}
+
+	emitByte(parser, compiler, OP_NULL);
+
+	patchJump(parser, compiler, breakJump);
+
+	emitByte(parser, compiler, OP_SWAP);
+	emitByte(parser, compiler, OP_POP);
+
+	consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after switch body.");
+
+	endScope(parser, compiler);
 }
 
 static uint8_t argumentList(Parser* parser, Compiler* compiler) {
@@ -1989,6 +2044,7 @@ ParseRule rules[] = {
   [TOKEN_NULL] = {literal, NULL, PREC_NONE},
   [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
   [TOKEN_SUPER] = {super, NULL, PREC_NONE},
+  [TOKEN_SWITCH] = {switchExpression, NULL, PREC_NONE},
   [TOKEN_THIS] = {this, NULL, PREC_NONE},
   [TOKEN_THROW] = {NULL, NULL, PREC_NONE},
   [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
