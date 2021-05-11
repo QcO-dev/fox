@@ -297,6 +297,9 @@ Token scanToken(Scanner* scanner) {
 			else if (match(scanner, '-')) {
 				type = TOKEN_DECREMENT;
 			}
+			else if (match(scanner, '>')) {
+				type = TOKEN_ARROW;
+			}
 			return makeToken(scanner, type);
 		}
 
