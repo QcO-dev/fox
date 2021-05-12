@@ -910,13 +910,13 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 					if (ib > ia) {
 
-						for (int64_t i = ia; i < ib; i++) {
+						for (int64_t i = ia; i <= ib; i++) {
 							writeValueArray(vm, &array, NUMBER_VAL(i));
 						}
 
 					}
 					else {
-						for (int64_t i = ia; i > ib; i--) {
+						for (int64_t i = ia; i >= ib; i--) {
 							writeValueArray(vm, &array, NUMBER_VAL(i));
 						}
 					}
