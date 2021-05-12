@@ -43,13 +43,7 @@ static void runFile(const char* path) {
 	char* slashRoot = malloc(length + 1);
 	strcpy(slashRoot, path);
 
-	char currentChar; int i;
-	for (currentChar = *slashRoot, i = 0; currentChar != '\0'; i++) {
-		currentChar = slashRoot[i];
-		if (currentChar == '\\') {
-			slashRoot[i] = '/';
-		}
-	}
+	changeSeparator(slashRoot);
 
 	char* lastInstance = fromLastInstance(slashRoot, "/");
 

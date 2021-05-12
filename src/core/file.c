@@ -79,3 +79,13 @@ char* inputString(FILE* fp, size_t size) {
 
 	return realloc(str, sizeof(*str) * len);
 }
+
+void changeSeparator(char* string) {
+	char currentChar; int i;
+	for (currentChar = *string, i = 0; currentChar != '\0'; i++) {
+		currentChar = string[i];
+		if (currentChar == '\\') {
+			string[i] = '/';
+		}
+	}
+}

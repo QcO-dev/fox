@@ -49,6 +49,7 @@ void initVM(VM* vm, char* name) {
 	vm->importCapacity = 0;
 	vm->importCount = 0;
 	vm->isImport = false;
+	vm->parent = NULL;
 
 	initTable(&vm->globals);
 	initTable(&vm->exports);
@@ -1660,6 +1661,33 @@ static char* resolveImport(VM* vm, ObjString* path) {
 
 	free(string);
 
+	char* foxHomeRaw;
+	if ((foxHomeRaw = getenv("FOX_HOME")) != NULL) {
+
+		size_t homeLength = strlen(foxHomeRaw);
+
+		char* foxHome = malloc(homeLength + 1);
+
+		strcpy(foxHome, foxHomeRaw);
+		changeSeparator(foxHome);
+		
+		if (foxHome[homeLength] != '/') {
+			foxHome = realloc(foxHome, homeLength + 2);
+			foxHome[homeLength] = '/';
+			homeLength += 1;
+			foxHome[homeLength] = '\0';
+		}
+
+		string = malloc(path->length + homeLength + 4 /*.fox*/ + 1);
+
+		memcpy(string, foxHome, homeLength);
+		memcpy(string + homeLength, path->chars, path->length);
+		memcpy(string + homeLength + path->length, extension, 4);
+		string[homeLength + path->length + 4] = '\0';
+
+		return string;
+	}
+
 	return NULL;
 }
 
@@ -1668,6 +1696,7 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 	initVM(vm, "module");
 
 	vm->isImport = true;
+	vm->parent = importingVm;
 
 	Chunk chunk;
 	initChunk(&chunk);

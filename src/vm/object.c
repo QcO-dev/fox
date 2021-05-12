@@ -26,14 +26,14 @@ Obj* allocateObject(VM* vm, size_t size, ObjType type) {
 	return object;
 }
 
-static ObjString* allocateString(VM* vm, char* chars, size_t length, uint32_t hash) {
+static ObjString* allocateString(VM* root, VM* vm, char* chars, size_t length, uint32_t hash) {
 	ObjString* string = ALLOCATE_OBJ(vm, ObjString, OBJ_STRING);
 	string->length = length;
 	string->chars = chars;
 	string->hash = hash;
 
 	push(vm, OBJ_VAL(string));
-	tableSet(vm, &vm->strings, string, NULL_VAL);
+	tableSet(root, &root->strings, string, NULL_VAL);
 	pop(vm);
 
 	return string;
@@ -54,28 +54,36 @@ static uint32_t hashString(const char* key, int length) {
 ObjString* takeString(VM* vm, char* chars, int length) {
 	uint32_t hash = hashString(chars, length);
 
-	ObjString* interned = tableFindString(&vm->strings, chars, length,
+	VM* root = vm;
+
+	while (root->parent != NULL) root = root->parent;
+
+	ObjString* interned = tableFindString(&root->strings, chars, length,
 		hash);
 	if (interned != NULL) {
 		FREE_ARRAY(vm, char, chars, length + 1);
 		return interned;
 	}
 
-	return allocateString(vm, chars, length, hash);
+	return allocateString(root, vm, chars, length, hash);
 }
 
 ObjString* copyString(VM* vm, const char* chars, size_t length) {
 
 	uint32_t hash = hashString(chars, length);
 
-	ObjString* interned = tableFindString(&vm->strings, chars, length, hash);
+	VM* root = vm;
+
+	while (root->parent != NULL) root = root->parent;
+
+	ObjString* interned = tableFindString(&root->strings, chars, length, hash);
 	if (interned != NULL) return interned;
 
 	char* heapChars = ALLOCATE(vm, char, length + 1);
 	memcpy(heapChars, chars, length);
 	heapChars[length] = '\0';
 
-	return allocateString(vm, heapChars, length, hash);
+	return allocateString(root, vm, heapChars, length, hash);
 }
 
 ObjFunction* newFunction(VM* vm) {
