@@ -9,14 +9,6 @@
 #include <signal.h>
 #include <core/file.h>
 
-#if defined(_WIN32) || defined(_WIN64) || defined(WINDOWS)
-#include <direct.h>
-#define getCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define getCurrentDir getcwd
-#endif
-
 // The below variable and function allows the user to exit with Ctrl-C
 static volatile sig_atomic_t replKeepRunning = 1;
 
@@ -51,13 +43,7 @@ static void runFile(const char* path) {
 	char* slashRoot = malloc(length + 1);
 	strcpy(slashRoot, path);
 
-	char currentChar; int i;
-	for (currentChar = *slashRoot, i = 0; currentChar != '\0'; i++) {
-		currentChar = slashRoot[i];
-		if (currentChar == '\\') {
-			slashRoot[i] = '/';
-		}
-	}
+	changeSeparator(slashRoot);
 
 	char* lastInstance = fromLastInstance(slashRoot, "/");
 

@@ -22,6 +22,8 @@
 
 static InterpreterResult import(VM* vm, char* path, ObjString* name, Value* value);
 
+static char* resolveImport(VM* vm, ObjString* path);
+
 void initVM(VM* vm, char* name) {
 
 	vm->frameSize = 64;
@@ -47,6 +49,7 @@ void initVM(VM* vm, char* name) {
 	vm->importCapacity = 0;
 	vm->importCount = 0;
 	vm->isImport = false;
+	vm->parent = NULL;
 
 	initTable(&vm->globals);
 	initTable(&vm->exports);
@@ -907,13 +910,13 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 					if (ib > ia) {
 
-						for (int64_t i = ia; i < ib; i++) {
+						for (int64_t i = ia; i <= ib; i++) {
 							writeValueArray(vm, &array, NUMBER_VAL(i));
 						}
 
 					}
 					else {
-						for (int64_t i = ia; i > ib; i--) {
+						for (int64_t i = ia; i >= ib; i--) {
 							writeValueArray(vm, &array, NUMBER_VAL(i));
 						}
 					}
@@ -1428,108 +1431,59 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				ObjString* path = READ_STRING();
 				ObjString* name = READ_STRING();
 
-				char* extension = ".fox";
+				char* resolvedFile = resolveImport(vm, path);
 
-				char* string = malloc(path->length + vm->filepath->length + 4 /*.fox*/ + 1);
-
-				memcpy(string, vm->filepath->chars, vm->filepath->length);
-				memcpy(string + vm->filepath->length, path->chars, path->length);
-				memcpy(string + vm->filepath->length + path->length, extension, 4);
-				string[path->length + vm->filepath->length + 4] = '\0';
-
-				if (_access(string, 0) == 0) {
-					Value object;
-					import(vm, string, name, &object);
-					push(vm, object);
-					free(string);
+				if (resolvedFile == NULL) {
+					if (!throwException(vm, "InvalidImportException", "Could not find import '%s'.", path->chars)) return STATUS_RUNTIME_ERR;
+					break;
 				}
-				else {
-					string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
 
-					memcpy(string, vm->basePath->chars, vm->basePath->length);
-					memcpy(string + vm->basePath->length, path->chars, path->length);
-					memcpy(string + vm->basePath->length + path->length, extension, 4);
-					string[path->length + vm->basePath->length + 4] = '\0';
+				Value object;
+				InterpreterResult result = import(vm, resolvedFile, name, &object);
 
-					if (_access(string, 0) == 0) {
-						Value object;
-						import(vm, string, name, &object);
-						push(vm, object);
-						free(string);
-					}
-
-					else {
-						free(string);
-						if (!throwException(vm, "InvalidImportException", "Could not find import '%s'.", path->chars)) return STATUS_RUNTIME_ERR;
-						break;
-					}
+				if (result != STATUS_OK) {
+					if (!throwException(vm, "InvalidImportException", "An Error occured whilst importing '%s'", path->chars)) return STATUS_RUNTIME_ERR;
+					break;
 				}
+
+				push(vm, object);
+				free(resolvedFile);
 
 				break;
 			}
 
 			case OP_IMPORT_STAR: {
-					// Dupicate code is bad. 
-					ObjString* path = READ_STRING();
-					ObjString* name = READ_STRING();
+				ObjString* path = READ_STRING();
+				ObjString* name = READ_STRING();
 
-					char* extension = ".fox";
+				char* resolvedFile = resolveImport(vm, path);
 
-					char* string = malloc(path->length + vm->filepath->length + 4 /*.fox*/ + 1);
-
-					memcpy(string, vm->filepath->chars, vm->filepath->length);
-					memcpy(string + vm->filepath->length, path->chars, path->length);
-					memcpy(string + vm->filepath->length + path->length, extension, 4);
-					string[path->length + vm->filepath->length + 4] = '\0';
-
-					if (_access(string, 0) == 0) {
-						Value object;
-						import(vm, string, name, &object);
-						ObjInstance* obj = AS_INSTANCE(object);
-
-						for (int i = 0; i <= obj->fields.capacity; i++) {
-							Entry* entry = &obj->fields.entries[i];
-							if (entry->key != NULL) {
-								// Copying the string due to interning making them different
-								tableSet(vm, &vm->globals, copyString(vm, entry->key->chars, entry->key->length), entry->value);
-							}
-						}
-						free(string);
-					}
-					else {
-						string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
-
-						memcpy(string, vm->basePath->chars, vm->basePath->length);
-						memcpy(string + vm->basePath->length, path->chars, path->length);
-						memcpy(string + vm->basePath->length + path->length, extension, 4);
-						string[path->length + vm->basePath->length + 4] = '\0';
-
-						if (_access(string, 0) == 0) {
-							Value object;
-							import(vm, string, name, &object);
-							
-							ObjInstance* obj = AS_INSTANCE(object);
-
-							for (int i = 0; i <= obj->fields.capacity; i++) {
-								Entry* entry = &obj->fields.entries[i];
-								if (entry->key != NULL) {
-									// Copying the string due to interning making them different
-									tableSet(vm, &vm->globals, copyString(vm, entry->key->chars, entry->key->length), entry->value);
-								}
-							}
-
-							free(string);
-						}
-
-						else {
-							free(string);
-							if (!throwException(vm, "InvalidImportException", "Could not find import '%s'.", path->chars)) return STATUS_RUNTIME_ERR;
-							break;
-						}
-					}
-
+				if (resolvedFile == NULL) {
+					if (!throwException(vm, "InvalidImportException", "Could not find import '%s'.", path->chars)) return STATUS_RUNTIME_ERR;
 					break;
 				}
+
+				Value object;
+				InterpreterResult result = import(vm, resolvedFile, name, &object);
+
+				if (result != STATUS_OK) {
+					if (!throwException(vm, "InvalidImportException", "An Error occured whilst importing '%s'", path->chars)) return STATUS_RUNTIME_ERR;
+					break;
+				}
+
+				ObjInstance* obj = AS_INSTANCE(object);
+
+				for (int i = 0; i <= obj->fields.capacity; i++) {
+					Entry* entry = &obj->fields.entries[i];
+					if (entry->key != NULL) {
+						// Copying the string due to interning making them different
+						tableSet(vm, &vm->globals, copyString(vm, entry->key->chars, entry->key->length), entry->value);
+					}
+				}
+				free(resolvedFile);
+
+				break;
+			}
 
 			case OP_TYPEOF: {
 				Value value = pop(vm);
@@ -1693,11 +1647,68 @@ InterpreterResult interpretVM(VM* vm, char* basePath, char* filename, const char
 	return execute(vm, &vm->frames[vm->frameCount - 1].closure->function->chunk);
 }
 
+static char* resolveImport(VM* vm, ObjString* path) {
+
+	char* extension = ".fox";
+
+	char* string = malloc(path->length + vm->filepath->length + 4 /*.fox*/ + 1);
+
+	memcpy(string, vm->filepath->chars, vm->filepath->length);
+	memcpy(string + vm->filepath->length, path->chars, path->length);
+	memcpy(string + vm->filepath->length + path->length, extension, 4);
+	string[path->length + vm->filepath->length + 4] = '\0';
+
+	if (_access(string, 0) == 0) return string;
+
+	free(string);
+
+	string = malloc(path->length + vm->basePath->length + 4 /*.fox*/ + 1);
+
+	memcpy(string, vm->basePath->chars, vm->basePath->length);
+	memcpy(string + vm->basePath->length, path->chars, path->length);
+	memcpy(string + vm->basePath->length + path->length, extension, 4);
+	string[path->length + vm->basePath->length + 4] = '\0';
+
+	if (_access(string, 0) == 0) return string;
+
+	free(string);
+
+	char* foxHomeRaw;
+	if ((foxHomeRaw = getenv("FOX_HOME")) != NULL) {
+
+		size_t homeLength = strlen(foxHomeRaw);
+
+		char* foxHome = malloc(homeLength + 1);
+
+		strcpy(foxHome, foxHomeRaw);
+		changeSeparator(foxHome);
+		
+		if (foxHome[homeLength] != '/') {
+			foxHome = realloc(foxHome, homeLength + 2);
+			foxHome[homeLength] = '/';
+			homeLength += 1;
+			foxHome[homeLength] = '\0';
+		}
+
+		string = malloc(path->length + homeLength + 4 /*.fox*/ + 1);
+
+		memcpy(string, foxHome, homeLength);
+		memcpy(string + homeLength, path->chars, path->length);
+		memcpy(string + homeLength + path->length, extension, 4);
+		string[homeLength + path->length + 4] = '\0';
+
+		return string;
+	}
+
+	return NULL;
+}
+
 InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* value) {
 	VM* vm = malloc(sizeof(VM));
 	initVM(vm, "module");
 
 	vm->isImport = true;
+	vm->parent = importingVm;
 
 	Chunk chunk;
 	initChunk(&chunk);

@@ -54,6 +54,7 @@ struct VM {
 	size_t importCapacity;
 	struct VM** imports;
 	bool isImport;
+	struct VM* parent;
 };
 
 void initVM(VM* vm, char* name);
