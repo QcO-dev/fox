@@ -9,14 +9,6 @@
 #include <signal.h>
 #include <core/file.h>
 
-#if defined(_WIN32) || defined(_WIN64) || defined(WINDOWS)
-#include <direct.h>
-#define getCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define getCurrentDir getcwd
-#endif
-
 // The below variable and function allows the user to exit with Ctrl-C
 static volatile sig_atomic_t replKeepRunning = 1;
 
