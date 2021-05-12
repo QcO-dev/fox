@@ -1439,7 +1439,13 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				Value object;
-				import(vm, resolvedFile, name, &object);
+				InterpreterResult result = import(vm, resolvedFile, name, &object);
+
+				if (result != STATUS_OK) {
+					if (!throwException(vm, "InvalidImportException", "An Error occured whilst importing '%s'", path->chars)) return STATUS_RUNTIME_ERR;
+					break;
+				}
+
 				push(vm, object);
 				free(resolvedFile);
 
@@ -1458,7 +1464,13 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 
 				Value object;
-				import(vm, resolvedFile, name, &object);
+				InterpreterResult result = import(vm, resolvedFile, name, &object);
+
+				if (result != STATUS_OK) {
+					if (!throwException(vm, "InvalidImportException", "An Error occured whilst importing '%s'", path->chars)) return STATUS_RUNTIME_ERR;
+					break;
+				}
+
 				ObjInstance* obj = AS_INSTANCE(object);
 
 				for (int i = 0; i <= obj->fields.capacity; i++) {
