@@ -39,7 +39,7 @@ static void repl() {
 }
 
 static void runFile(const char* path) {
-	int length = strlen(path);
+	size_t length = strlen(path);
 	char* slashRoot = malloc(length + 1);
 	strcpy(slashRoot, path);
 
@@ -51,7 +51,7 @@ static void runFile(const char* path) {
 	char* name;
 
 	if (lastInstance != NULL) {
-		int index = lastInstance - slashRoot;
+		size_t index = lastInstance - slashRoot;
 
 		base = malloc(index + 2);
 		memcpy(base, slashRoot, index);

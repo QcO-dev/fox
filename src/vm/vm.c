@@ -103,7 +103,7 @@ Value pop(VM* vm) {
 	return *vm->stackTop;
 }
 
-Value peek(VM* vm, int distance) {
+Value peek(VM* vm, size_t distance) {
 	return vm->stackTop[-1 - distance];
 }
 
@@ -118,10 +118,10 @@ void runtimeError(VM* vm, const char* format, ...) {
 
 	size_t prevLine = 0;
 	ObjFunction* prevFunction = NULL;
-	int count = 0;
+	size_t count = 0;
 	bool repeating = false;
 
-	for (int i = vm->frameCount - 1; i >= 0; i--) {
+	for (size_t i = vm->frameCount - 1; i >= 0; i--) {
 		CallFrame* frame = &vm->frames[i];
 		ObjFunction* function = frame->closure->function;
 		// -1 because the IP is sitting on the next instruction to be executed.
@@ -131,11 +131,11 @@ void runtimeError(VM* vm, const char* format, ...) {
 
 		if (line != prevLine || function != prevFunction) {
 			if (repeating == true) {
-				fprintf(stderr, "[Previous * %d]\n", count);
+				fprintf(stderr, "[Previous * %zu]\n", count);
 				repeating = false;
 				count = 0;
 			}
-			fprintf(stderr, "[%d] in ", line);
+			fprintf(stderr, "[%zu] in ", line);
 			if (function->name == NULL) {
 				fprintf(stderr, "<script>\n");
 			}
@@ -275,7 +275,7 @@ static bool call(VM* vm, ObjClosure* closure, size_t argCount) {
 	}
 
 	if (vm->frameCount + 1 == vm->frameSize) {
-		int oldCount = vm->frameSize;
+		size_t oldCount = vm->frameSize;
 		vm->frameSize = vm->frameSize < 8 ? 8 : vm->frameSize * 2;
 		vm->frames = GROW_ARRAY(vm, CallFrame, vm->frames, oldCount, vm->frameSize);
 
@@ -449,7 +449,7 @@ static bool throwGeneral(VM* vm, ObjInstance* throwee) {
 
 	size_t line = getLine(&function->chunk.table, instruction);
 
-	tableSet(vm, fields, copyString(vm, "line", 4), NUMBER_VAL(line));
+	tableSet(vm, fields, copyString(vm, "line", 4), NUMBER_VAL((double)line));
 
 	ValueArray stackTrace;
 	initValueArray(&stackTrace);
@@ -467,10 +467,10 @@ static bool throwGeneral(VM* vm, ObjInstance* throwee) {
 
 		// In form:
 		// [%d] in %s <- line, function name
-		int lineNumberLength = snprintf(NULL, 0, "%d", line);
+		size_t lineNumberLength = snprintf(NULL, 0, "%zu", line);
 		size_t lineLength = 1 + lineNumberLength + 1 + 4 + (function->name == NULL ? 8 : function->name->length);
 		char* str = malloc(lineLength + 1);
-		sprintf(str, "[%d] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
+		sprintf(str, "[%zu] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
 
 		writeValueArray(vm, &stackTrace, OBJ_VAL(takeString(vm, str, lineLength)));
 
@@ -514,10 +514,10 @@ static bool throwGeneral(VM* vm, ObjInstance* throwee) {
 
 	// In form:
 	// [%d] in %s <- line, function name
-	int lineNumberLength = snprintf(NULL, 0, "%d", line);
+	size_t lineNumberLength = snprintf(NULL, 0, "%zu", line);
 	size_t lineLength = 1 + lineNumberLength + 1 + 4 + (function->name == NULL ? 8 : function->name->length);
 	char* str = malloc(lineLength + 1);
-	sprintf(str, "[%d] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
+	sprintf(str, "[%zu] in %s", line, function->name == NULL ? "<script>" : function->name->chars);
 
 	writeValueArray(vm, &stackTrace, OBJ_VAL(takeString(vm, str, lineLength)));
 
@@ -644,7 +644,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 	  } \
 	  int64_t b = (int64_t) AS_NUMBER(pop(vm)); \
 	  int64_t a = (int64_t) AS_NUMBER(pop(vm)); \
-	  push(vm, valueType(a op b)); \
+	  push(vm, valueType((double)(a op b))); \
 	} while (false)
 
 	for (;;) {
@@ -748,7 +748,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 				int64_t integer = (int64_t)pop(vm).number;
 
-				push(vm, NUMBER_VAL(~integer));
+				push(vm, NUMBER_VAL((double)~integer));
 
 				break;
 			}
@@ -773,7 +773,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 				}
 				uint64_t b = (uint64_t)AS_NUMBER(pop(vm));
 				uint64_t a = (uint64_t)AS_NUMBER(pop(vm));
-				push(vm, NUMBER_VAL(a >> b)); 
+				push(vm, NUMBER_VAL((double)(a >> b))); 
 				break;
 			}
 			case OP_ASH: BINARY_INTEGER_OP(vm, NUMBER_VAL, >>); break;
@@ -911,13 +911,13 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 					if (ib > ia) {
 
 						for (int64_t i = ia; i <= ib; i++) {
-							writeValueArray(vm, &array, NUMBER_VAL(i));
+							writeValueArray(vm, &array, NUMBER_VAL((double)i));
 						}
 
 					}
 					else {
 						for (int64_t i = ia; i >= ib; i--) {
-							writeValueArray(vm, &array, NUMBER_VAL(i));
+							writeValueArray(vm, &array, NUMBER_VAL((double)i));
 						}
 					}
 					push(vm, OBJ_VAL(newList(vm, array)));
@@ -1065,7 +1065,7 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_INVOKE: {
 				ObjString* method = READ_STRING();
-				size_t argCount = READ_BYTE();
+				int argCount = READ_BYTE();
 				if (!invoke(vm, method, argCount)) {
 					return STATUS_RUNTIME_ERR;
 				}
@@ -1718,7 +1718,7 @@ InterpreterResult import(VM* importingVm, char* path, ObjString* name, Value* va
 	strcpy(vm->filename, name->chars);
 	strcpy(vm->filename + name->length, ".fox");
 
-	int filepathIndex = (fromLastInstance(path, "/") - path) + 1;
+	size_t filepathIndex = (fromLastInstance(path, "/") - path) + 1;
 
 	char* filepath = malloc(filepathIndex + 1);
 	memcpy(filepath, path, filepathIndex);

@@ -40,10 +40,10 @@ static ObjString* allocateString(VM* root, VM* vm, char* chars, size_t length, u
 }
 
 //FNV-1a
-static uint32_t hashString(const char* key, int length) {
+static uint32_t hashString(const char* key, size_t length) {
 	uint32_t hash = 2166136261u;
 
-	for (int i = 0; i < length; i++) {
+	for (size_t i = 0; i < length; i++) {
 		hash ^= (uint8_t)key[i];
 		hash *= 16777619;
 	}
@@ -51,7 +51,7 @@ static uint32_t hashString(const char* key, int length) {
 	return hash;
 }
 
-ObjString* takeString(VM* vm, char* chars, int length) {
+ObjString* takeString(VM* vm, char* chars, size_t length) {
 	uint32_t hash = hashString(chars, length);
 
 	VM* root = vm;

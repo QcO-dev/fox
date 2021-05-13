@@ -41,11 +41,11 @@ typedef struct Compiler {
 	int localCount;
 	int scopeDepth;
 	bool isLoop;
-	int continuePoint;
-	int breakPoint;
+	size_t continuePoint;
+	size_t breakPoint;
 	bool lvalue;
 	Opcode lvalueSet;
-	int lvalueArg;
+	size_t lvalueArg;
 	bool expectLvalue;
 } Compiler;
 
@@ -160,7 +160,7 @@ static void emitByte(Parser* parser, Compiler* compiler, uint8_t byte) {
 	writeChunk(compiler->vm, currentChunk(compiler), byte, parser->previous.line);
 }
 
-static int emitJump(Parser* parser, Compiler* compiler, uint8_t instruction) {
+static size_t emitJump(Parser* parser, Compiler* compiler, uint8_t instruction) {
 	emitByte(parser, compiler, instruction);
 	emitByte(parser, compiler, 0xff);
 	emitByte(parser, compiler, 0xff);
@@ -170,7 +170,7 @@ static int emitJump(Parser* parser, Compiler* compiler, uint8_t instruction) {
 static void emitLoop(Parser* parser, Compiler* compiler, size_t loopStart) {
 	emitByte(parser, compiler, OP_LOOP);
 
-	int offset = currentChunk(compiler)->count - loopStart + 2;
+	size_t offset = currentChunk(compiler)->count - loopStart + 2;
 	if (offset > UINT16_MAX) error(parser, "Loop body too large.");
 
 	emitByte(parser, compiler, (offset >> 8) & 0xff);
@@ -179,7 +179,7 @@ static void emitLoop(Parser* parser, Compiler* compiler, size_t loopStart) {
 
 static void patchJump(Parser* parser, Compiler* compiler, size_t offset) {
 	// -2 to adjust for the bytecode for the jump offset itself.
-	int jump = currentChunk(compiler)->count - offset - 2;
+	size_t jump = currentChunk(compiler)->count - offset - 2;
 
 	if (jump > UINT16_MAX) {
 		error(parser, "Too much code to jump over.");
@@ -251,7 +251,7 @@ static void error(Parser* parser, const char* message) {
 static void errorAt(Parser* parser, Token* token, const char* message) {
 	if (parser->panicMode) return;
 	parser->panicMode = true;
-	fprintf(stderr, "[%d] Error", token->line);
+	fprintf(stderr, "[%zu] Error", token->line);
 
 	if (token->type == TOKEN_EOF) {
 		fprintf(stderr, " at EOF");
@@ -268,7 +268,7 @@ static void errorAt(Parser* parser, Token* token, const char* message) {
 }
 
 static uint8_t makeConstant(Parser* parser, Compiler* compiler, Value value) {
-	int constant = addConstant(compiler->vm, currentChunk(compiler), value);
+	size_t constant = addConstant(compiler->vm, currentChunk(compiler), value);
 	if (constant > UINT8_MAX) {
 		error(parser, "Too many constants in one chunk.");
 		return 0;
@@ -653,8 +653,86 @@ static void lambdaOr(Parser* parser, Compiler* c, bool canAssign, bool canDestru
 	}
 }
 
+static void prefixIncDec(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
+	TokenType operatorType = parser->previous.type;
+	Token* op = &parser->previous;
+
+	compiler->expectLvalue = true;
+	parsePrecedence(parser, compiler, PREC_UNARY);
+	compiler->expectLvalue = false;
+
+	if (!compiler->lvalue) {
+		errorAt(parser, op, "Invalid right-hand expression after prefix operator.");
+	}
+
+	emitByte(parser, compiler, operatorType == TOKEN_INCREMENT ? OP_INCREMENT : OP_DECREMENT);
+	emitByte(parser, compiler, compiler->lvalueSet);
+	if (compiler->lvalueSet != OP_SET_INDEX) emitByte(parser, compiler, (uint8_t)compiler->lvalueArg);
+}
+
+static void postIncDec(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
+	TokenType operatorType = parser->previous.type;
+	if (!compiler->lvalue) {
+		error(parser, "Invalid left-hand expression before postfix operator");
+	}
+
+	Opcode opcode = operatorType == TOKEN_INCREMENT ? OP_INCREMENT : OP_DECREMENT;
+
+	if (compiler->lvalueSet == OP_SET_PROPERTY) {
+		// Replace [OP_GET_PROPERTY name] with [OP_DUP OP_GET_PROPERTY name]
+		compiler->function->chunk.code[compiler->function->chunk.count - 2] = OP_DUP;
+		compiler->function->chunk.code[compiler->function->chunk.count - 1] = OP_GET_PROPERTY;
+		emitByte(parser, compiler, (uint8_t)compiler->lvalueArg);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, opcode);
+
+		emitByte(parser, compiler, OP_SET_PROPERTY);
+		emitByte(parser, compiler, (uint8_t)compiler->lvalueArg);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+	else if (compiler->lvalueSet == OP_SET_INDEX) {
+		compiler->function->chunk.code[compiler->function->chunk.count - 1] = OP_DUP_OFFSET;
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 1);
+
+		emitByte(parser, compiler, OP_GET_INDEX);
+
+		emitByte(parser, compiler, OP_SWAP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, OP_SWAP);
+
+		emitByte(parser, compiler, OP_DUP_OFFSET);
+		emitByte(parser, compiler, 2);
+
+		emitByte(parser, compiler, opcode);
+
+		emitByte(parser, compiler, OP_SET_INDEX);
+
+		emitByte(parser, compiler, OP_POP);
+	}
+	else {
+
+		emitByte(parser, compiler, OP_DUP);
+
+		emitByte(parser, compiler, opcode);
+
+		emitByte(parser, compiler, compiler->lvalueSet);
+		emitByte(parser, compiler, (uint8_t)compiler->lvalueArg);
+		emitByte(parser, compiler, OP_POP);
+	}
+}
+
 static void and(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
-	int endJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
+	size_t endJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
 
 	emitByte(parser, compiler, OP_POP);
 	parsePrecedence(parser, compiler, PREC_AND);
@@ -663,8 +741,8 @@ static void and(Parser* parser, Compiler* compiler, bool canAssign, bool canDest
 }
 
 static void or(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
-	int elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
-	int endJump = emitJump(parser, compiler, OP_JUMP);
+	size_t elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE_S);
+	size_t endJump = emitJump(parser, compiler, OP_JUMP);
 
 	patchJump(parser, compiler, elseJump);
 	emitByte(parser, compiler, OP_POP);
@@ -715,9 +793,9 @@ static void dot(Parser* parser, Compiler* compiler, bool canAssign, bool canDest
 }
 
 static void ternary(Parser* parser, Compiler* compiler, bool canAssign, bool canDestructure) {
-	int elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	size_t elseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	expression(parser, compiler); // true value
-	int trueJump = emitJump(parser, compiler, OP_JUMP);
+	size_t trueJump = emitJump(parser, compiler, OP_JUMP);
 	patchJump(parser, compiler, elseJump);
 	if (match(parser, TOKEN_COLON)) {
 		expression(parser, compiler); //false value
@@ -832,8 +910,8 @@ static void switchExpression(Parser* parser, Compiler* compiler, bool canAssign,
 
 	consume(parser, TOKEN_LEFT_BRACE, "Expected '{' before switch body.");
 
-	int breakSkip = emitJump(parser, compiler, OP_JUMP);
-	int breakJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	size_t breakSkip = emitJump(parser, compiler, OP_JUMP);
+	size_t breakJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	patchJump(parser, compiler, breakSkip);
 
 	while (parser->current.type != TOKEN_RIGHT_BRACE && parser->current.type != TOKEN_EOF) {
@@ -842,14 +920,14 @@ static void switchExpression(Parser* parser, Compiler* compiler, bool canAssign,
 		pattern(parser, compiler);
 
 		while (match(parser, TOKEN_COMMA)) {
-			int falseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
-			int trueJump = emitJump(parser, compiler, OP_JUMP);
+			size_t falseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+			size_t trueJump = emitJump(parser, compiler, OP_JUMP);
 			patchJump(parser, compiler, falseJump);
 			pattern(parser, compiler);
 			patchJump(parser, compiler, trueJump);
 		}
 
-		int jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+		size_t jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 
 		consume(parser, TOKEN_ARROW, "Expected '->' after switch case.");
 
@@ -907,10 +985,10 @@ static int resolveLocal(Parser* parser, Compiler* compiler, Token* name) {
 	return -1;
 }
 
-static int addUpvalue(Parser* parser, Compiler* compiler, uint8_t index, bool isLocal) {
-	int upvalueCount = compiler->function->upvalueCount;
+static size_t addUpvalue(Parser* parser, Compiler* compiler, uint8_t index, bool isLocal) {
+	size_t upvalueCount = compiler->function->upvalueCount;
 
-	for (int i = 0; i < upvalueCount; i++) {
+	for (size_t i = 0; i < upvalueCount; i++) {
 		Upvalue* upvalue = &compiler->upvalues[i];
 		if (upvalue->index == index && upvalue->isLocal == isLocal) {
 			return i;
@@ -927,7 +1005,7 @@ static int addUpvalue(Parser* parser, Compiler* compiler, uint8_t index, bool is
 	return compiler->function->upvalueCount++;
 }
 
-static int resolveUpvalue(Parser* parser, Compiler* compiler, Token* name) {
+static size_t resolveUpvalue(Parser* parser, Compiler* compiler, Token* name) {
 	if (compiler->enclosing == NULL) return -1;
 
 	int local = resolveLocal(parser, compiler->enclosing, name);
@@ -936,7 +1014,7 @@ static int resolveUpvalue(Parser* parser, Compiler* compiler, Token* name) {
 		return addUpvalue(parser, compiler, (uint8_t)local, true);
 	}
 
-	int upvalue = resolveUpvalue(parser, compiler->enclosing, name);
+	size_t upvalue = resolveUpvalue(parser, compiler->enclosing, name);
 	if (upvalue != -1) {
 		return addUpvalue(parser, compiler, (uint8_t)upvalue, false);
 	}
@@ -947,7 +1025,7 @@ static int resolveUpvalue(Parser* parser, Compiler* compiler, Token* name) {
 static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool canAssign, bool canDestructure) {
 
 	uint8_t getOp, setOp;
-	int arg = resolveLocal(parser, compiler, &name);
+	size_t arg = resolveLocal(parser, compiler, &name);
 	if (arg != -1) {
 		getOp = OP_GET_LOCAL;
 		setOp = OP_SET_LOCAL;
@@ -963,13 +1041,13 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 	}
 
 	if (canDestructure && match(parser, TOKEN_COMMA)) {
-		int names[256];
+		size_t names[256];
 		uint8_t setOps[256];
 		uint8_t tokenNames[256];
 		names[0] = arg;
 		setOps[0] = setOp;
 		tokenNames[0] = identifierConstant(parser, compiler, &name);
-		int index = 0;
+		size_t index = 0;
 
 		do {
 			index++;
@@ -979,7 +1057,7 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 
 			name = parser->previous;
 
-			int var = resolveLocal(parser, compiler, &name);
+			size_t var = resolveLocal(parser, compiler, &name);
 			if (var != -1) {
 				setOps[index] = OP_SET_LOCAL;
 			}
@@ -998,28 +1076,28 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 		if (match(parser, TOKEN_EQUAL)) {
 			expression(parser, compiler);
 
-			int length = index + 1;
-			for (int i = 0; i < length; i++) {
+			size_t length = index + 1;
+			for (size_t i = 0; i < length; i++) {
 				emitByte(parser, compiler, OP_DUP);
-				emitConstant(parser, compiler, NUMBER_VAL(i));
+				emitConstant(parser, compiler, NUMBER_VAL((double)i));
 				emitByte(parser, compiler, OP_GET_INDEX);
 
 				emitByte(parser, compiler, setOps[i]);
-				emitByte(parser, compiler, names[i]);
+				emitByte(parser, compiler, (uint8_t)names[i]);
 				emitByte(parser, compiler, OP_POP);
 			}
 		}
 		else if (match(parser, TOKEN_REV_ARROW)) {
 			expression(parser, compiler);
 
-			int count = index + 1;
-			for (int i = 0; i < count; i++) {
+			size_t count = index + 1;
+			for (size_t i = 0; i < count; i++) {
 				emitByte(parser, compiler, OP_DUP);
 				emitByte(parser, compiler, OP_GET_PROPERTY);
 				emitByte(parser, compiler, tokenNames[i]);
 
 				emitByte(parser, compiler, setOps[i]);
-				emitByte(parser, compiler, names[i]);
+				emitByte(parser, compiler, (uint8_t)names[i]);
 				emitByte(parser, compiler, OP_POP);
 			}
 		}
@@ -1032,22 +1110,22 @@ static void namedVariable(Parser* parser, Compiler* compiler, Token name, bool c
 	else if (canAssign && match(parser, TOKEN_EQUAL)) {
 		expression(parser, compiler);
 		emitByte(parser, compiler, setOp);
-		emitByte(parser, compiler, arg);
+		emitByte(parser, compiler, (uint8_t)arg);
 	}
 	else if (canAssign && isAssignment(parser)) {
 		TokenType type = parser->previous.type;
 		emitByte(parser, compiler, getOp);
-		emitByte(parser, compiler, arg);
+		emitByte(parser, compiler, (uint8_t)arg);
 
 		expression(parser, compiler);
 		inplaceOperator(parser, compiler, type);
 
 		emitByte(parser, compiler, setOp);
-		emitByte(parser, compiler, arg);
+		emitByte(parser, compiler, (uint8_t)arg);
 	}
 	else {
 		emitByte(parser, compiler, getOp);
-		emitByte(parser, compiler, arg);
+		emitByte(parser, compiler, (uint8_t)arg);
 		compiler->lvalue = true;
 		compiler->lvalueSet = setOp;
 		compiler->lvalueArg = arg;
@@ -1080,7 +1158,7 @@ static void ifStatement(Parser* parser, Compiler* compiler) {
 	size_t thenJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	statement(parser, compiler);
 
-	int elseJump = emitJump(parser, compiler, OP_JUMP);
+	size_t elseJump = emitJump(parser, compiler, OP_JUMP);
 
 	patchJump(parser, compiler, thenJump);
 
@@ -1092,18 +1170,18 @@ static void ifStatement(Parser* parser, Compiler* compiler) {
 static void whileStatement(Parser* parser, Compiler* compiler) {
 
 	bool wasLoop = compiler->isLoop;
-	int prevBreakPoint = compiler->breakPoint;
-	int prevContinuePoint = compiler->continuePoint;
+	size_t prevBreakPoint = compiler->breakPoint;
+	size_t prevContinuePoint = compiler->continuePoint;
 
 	compiler->isLoop = true;
-	int loopStart = currentChunk(compiler)->count;
+	size_t loopStart = currentChunk(compiler)->count;
 
 	compiler->continuePoint = loopStart;
 	consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
 	expression(parser, compiler);
 	consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
-	int exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	size_t exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	compiler->breakPoint = exitJump;
 	statement(parser, compiler);
 
@@ -1118,8 +1196,8 @@ static void whileStatement(Parser* parser, Compiler* compiler) {
 static void forStatement(Parser* parser, Compiler* compiler) {
 
 	bool wasLoop = compiler->isLoop;
-	int prevBreakPoint = compiler->breakPoint;
-	int prevContinuePoint = compiler->continuePoint;
+	size_t prevBreakPoint = compiler->breakPoint;
+	size_t prevContinuePoint = compiler->continuePoint;
 
 	compiler->isLoop = true;
 	beginScope(compiler);
@@ -1136,9 +1214,9 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 		expressionStatement(parser, compiler);
 	}
 
-	int loopStart = currentChunk(compiler)->count;
+	size_t loopStart = currentChunk(compiler)->count;
 	compiler->continuePoint = loopStart;
-	int exitJump = -1;
+	size_t exitJump = -1;
 	if (!match(parser, TOKEN_SEMICOLON)) {
 		expression(parser, compiler);
 		consume(parser, TOKEN_SEMICOLON, "Expect ';' after loop condition.");
@@ -1154,9 +1232,9 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 	}
 
 	if (!match(parser, TOKEN_RIGHT_PAREN)) {
-		int bodyJump = emitJump(parser, compiler, OP_JUMP);
+		size_t bodyJump = emitJump(parser, compiler, OP_JUMP);
 
-		int incrementStart = currentChunk(compiler)->count;
+		size_t incrementStart = currentChunk(compiler)->count;
 		expression(parser, compiler);
 		emitByte(parser, compiler, OP_POP);
 		consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after for statement.");
@@ -1184,8 +1262,8 @@ static void forStatement(Parser* parser, Compiler* compiler) {
 static void foreachStatement(Parser* parser, Compiler* compiler) {
 
 	bool wasLoop = compiler->isLoop;
-	int prevBreakPoint = compiler->breakPoint;
-	int prevContinuePoint = compiler->continuePoint;
+	size_t prevBreakPoint = compiler->breakPoint;
+	size_t prevContinuePoint = compiler->continuePoint;
 
 	beginScope(compiler);
 
@@ -1220,7 +1298,7 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 	emitByte(parser, compiler, iterator);
 	emitByte(parser, compiler, 0);
 
-	int loopStart = currentChunk(compiler)->count;
+	size_t loopStart = currentChunk(compiler)->count;
 	compiler->continuePoint = loopStart;
 
 	emitByte(parser, compiler, OP_DUP);
@@ -1234,7 +1312,7 @@ static void foreachStatement(Parser* parser, Compiler* compiler) {
 	emitByte(parser, compiler, 0);
 
 	emitByte(parser, compiler, OP_NOT);
-	int exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	size_t exitJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	compiler->breakPoint = exitJump;
 
 	emitByte(parser, compiler, OP_DUP);
@@ -1321,8 +1399,8 @@ static void switchStatement(Parser* parser, Compiler* compiler) {
 
 	consume(parser, TOKEN_LEFT_BRACE, "Expected '{' before switch body.");
 
-	int breakSkip = emitJump(parser, compiler, OP_JUMP);
-	int breakJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+	size_t breakSkip = emitJump(parser, compiler, OP_JUMP);
+	size_t breakJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 	patchJump(parser, compiler, breakSkip);
 
 	while (parser->current.type != TOKEN_RIGHT_BRACE && parser->current.type != TOKEN_EOF) {
@@ -1331,14 +1409,14 @@ static void switchStatement(Parser* parser, Compiler* compiler) {
 		pattern(parser, compiler);
 
 		while (match(parser, TOKEN_COMMA)) {
-			int falseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
-			int trueJump = emitJump(parser, compiler, OP_JUMP);
+			size_t falseJump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+			size_t trueJump = emitJump(parser, compiler, OP_JUMP);
 			patchJump(parser, compiler, falseJump);
 			pattern(parser, compiler);
 			patchJump(parser, compiler, trueJump);
 		}
 
-		int jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
+		size_t jump = emitJump(parser, compiler, OP_JUMP_IF_FALSE);
 
 		consume(parser, TOKEN_ARROW, "Expected '->' after switch case.");
 
@@ -1404,13 +1482,13 @@ static void throwStatement(Parser* parser, Compiler* compiler) {
 
 static void tryStatement(Parser* parser, Compiler* compiler) {
 	emitByte(parser, compiler, OP_TRY_BEGIN);
-	int catchLocation = currentChunk(compiler)->count;
+	size_t catchLocation = currentChunk(compiler)->count;
 	emitByte(parser, compiler, 0xff);
 	emitByte(parser, compiler, 0xff);
 	// try statement
 	statement(parser, compiler);
 	emitByte(parser, compiler, OP_TRY_END);
-	int tryFinallyJump = emitJump(parser, compiler, OP_JUMP);
+	size_t tryFinallyJump = emitJump(parser, compiler, OP_JUMP);
 
 	if (!match(parser, TOKEN_CATCH)) {
 		error(parser, "Expected 'catch' block after try.");
@@ -2022,8 +2100,8 @@ ParseRule rules[] = {
   [TOKEN_IN_XOR] = {NULL, NULL, PREC_NONE},
   [TOKEN_ARROW] = {NULL, NULL, PREC_NONE},
   [TOKEN_REV_ARROW] = {NULL, NULL, PREC_NONE},
-  [TOKEN_INCREMENT] = {NULL, NULL, PREC_NONE},
-  [TOKEN_DECREMENT] = {NULL, NULL, PREC_NONE},
+  [TOKEN_INCREMENT] = {prefixIncDec, postIncDec, PREC_POSTFIX},
+  [TOKEN_DECREMENT] = {prefixIncDec, postIncDec, PREC_POSTFIX},
   [TOKEN_BREAK] = {NULL, NULL, PREC_NONE},
   [TOKEN_CATCH] = {NULL, NULL, PREC_NONE},
   [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},

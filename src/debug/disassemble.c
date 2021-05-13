@@ -42,20 +42,20 @@ static size_t constantInstruction(VM* vm, const char* name, size_t offset, Chunk
 	return offset + 2;
 }
 
-static int byteInstruction(const char* name, size_t offset, Chunk* chunk) {
+static size_t byteInstruction(const char* name, size_t offset, Chunk* chunk) {
 	uint8_t slot = chunk->code[offset + 1];
 	printf("%-16s %4d", name, slot);
 	return offset + 2;
 }
 
-static int jumpInstruction(const char* name, int sign, size_t offset, Chunk* chunk) {
+static size_t jumpInstruction(const char* name, int sign, size_t offset, Chunk* chunk) {
 	uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
 	jump |= chunk->code[offset + 2];
-	printf("%-16s %4d | %d", name, offset, offset + 3 + sign * jump);
+	printf("%-16s %4zu | %zu", name, offset, offset + 3 + sign * jump);
 	return offset + 3;
 }
 
-static int invokeInstruction(VM* vm, const char* name, size_t offset, Chunk* chunk) {
+static size_t invokeInstruction(VM* vm, const char* name, size_t offset, Chunk* chunk) {
 	uint8_t constant = chunk->code[offset + 1];
 	uint8_t argCount = chunk->code[offset + 2];
 	char* string = valueToString(vm, chunk->constants.values[constant]);
@@ -64,7 +64,7 @@ static int invokeInstruction(VM* vm, const char* name, size_t offset, Chunk* chu
 	return offset + 3;
 }
 
-static int importInstruction(VM* vm, const char* name, size_t offset, Chunk* chunk) {
+static size_t importInstruction(VM* vm, const char* name, size_t offset, Chunk* chunk) {
 	uint8_t constant = chunk->code[offset + 1];
 	char* string = valueToString(vm, chunk->constants.values[constant]);
 
@@ -78,8 +78,8 @@ static int importInstruction(VM* vm, const char* name, size_t offset, Chunk* chu
 
 size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 
-	printf("%04d ", offset);
-	printf("%4d ", getLine(&chunk->table, offset));
+	printf("%04zu ", offset);
+	printf("%4zu ", getLine(&chunk->table, offset));
 
 	uint8_t instruction = chunk->code[offset];
 
@@ -136,7 +136,7 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 			for (size_t j = 0; j < function->upvalueCount; j++) {
 				int isLocal = chunk->code[offset++];
 				int index = chunk->code[offset++];
-				printf("\n%04d      |                     %s %d",
+				printf("\n%04zu      |                     %s %d",
 					offset - 2, isLocal ? "local" : "upvalue", index);
 			}
 
@@ -169,7 +169,7 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 			uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
 			jump |= chunk->code[offset + 2];
 
-			printf("%-16s %4d", "TRY_BEGIN", offset + jump);
+			printf("%-16s %4zu", "TRY_BEGIN", offset + jump);
 			return offset + 3;
 		}
 		case OP_TRY_END: return simpleInstruction("TRY_END", offset);

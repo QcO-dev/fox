@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 Value listLengthNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
-	return NUMBER_VAL(AS_LIST(*bound)->items.count);
+	return NUMBER_VAL((double)AS_LIST(*bound)->items.count);
 }
 
 Value listAppendNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {

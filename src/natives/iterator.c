@@ -72,7 +72,7 @@ Value iteratorNext(VM* vm, size_t argCount, Value* args, Value* bound, bool* has
 		return pop(vm);
 	}
 
-	tableSet(vm, &instance->fields, copyString(vm, "index", 5), NUMBER_VAL(index + 1));
+	tableSet(vm, &instance->fields, copyString(vm, "index", 5), NUMBER_VAL((double)(index + 1)));
 
 	return returnValue;
 }
