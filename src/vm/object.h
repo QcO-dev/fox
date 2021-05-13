@@ -110,7 +110,7 @@ ObjString* copyString(struct VM* vm, const char* chars, size_t length);
 
 char* objectToString(VM* vm, Value value);
 
-ObjString* takeString(struct VM* vm, char* chars, int length);
+ObjString* takeString(struct VM* vm, char* chars, size_t length);
 
 typedef struct {
 	Obj obj;

@@ -77,6 +77,6 @@ bool callValue(VM* vm, Value callee, size_t argCount);
 
 bool invoke(VM* vm, ObjString* name, int argCount);
 
-Value peek(VM* vm, int distance);
+Value peek(VM* vm, size_t distance);
 
 bool throwException(VM* vm, char* name, char* reason, ...);

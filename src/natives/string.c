@@ -2,7 +2,7 @@
 #include <vm/vm.h>
 
 Value stringLengthNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
-	return NUMBER_VAL(AS_STRING(*bound)->length);
+	return NUMBER_VAL((double)AS_STRING(*bound)->length);
 }
 
 Value stringIteratorNative(VM* vm, size_t argCount, Value* args, Value* bound, bool* hasError) {
