@@ -827,7 +827,7 @@ static void super(Parser* parser, Compiler* compiler, bool canAssign, bool canDe
 		error(parser, "Can't use 'super' in a class with no superclass.");
 	}
 
-	if (match(parser, TOKEN_LEFT_PAREN)) {
+	else if (match(parser, TOKEN_LEFT_PAREN)) {
 		uint8_t name = identifierConstant(parser, compiler, &parser->currentClass->superclass);
 
 		namedVariable(parser, compiler, syntheticToken("this"), false, false);
@@ -1918,6 +1918,28 @@ static void classDeclaration(Parser* parser, Compiler* compiler) {
 	parser->currentClass = parser->currentClass->enclosing;
 }
 
+static void extendsDeclaration(Parser* parser, Compiler* compiler) {
+	consume(parser, TOKEN_IDENTIFIER, "Expected class name.");
+	variable(parser, compiler, false, false);
+
+	ClassCompiler classCompiler;
+	classCompiler.name = parser->previous;
+	classCompiler.hasSuperclass = false;
+	classCompiler.enclosing = parser->currentClass;
+	parser->currentClass = &classCompiler;
+
+	consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+
+	while (parser->current.type != TOKEN_RIGHT_BRACE && parser->current.type != TOKEN_EOF) {
+		method(parser, compiler);
+	}
+
+	consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+	emitByte(parser, compiler, OP_POP);
+
+	parser->currentClass = parser->currentClass->enclosing;
+}
+
 static void importDeclaration(Parser* parser, Compiler* compiler) {
 
 	consume(parser, TOKEN_IDENTIFIER, "Expected import name.");
@@ -2034,6 +2056,9 @@ static void fromDeclaration(Parser* parser, Compiler* compiler) {
 static void declaration(Parser* parser, Compiler* compiler) {
 	if (match(parser, TOKEN_CLASS)) {
 		classDeclaration(parser, compiler);
+	}
+	else if (match(parser, TOKEN_EXTENDS)) {
+		extendsDeclaration(parser, compiler);
 	}
 	else if (match(parser, TOKEN_FUNCTION)) {
 		funDeclaration(parser, compiler);
