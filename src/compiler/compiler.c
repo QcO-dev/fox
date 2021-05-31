@@ -83,7 +83,7 @@ typedef enum Precedence {
 	PREC_COMPARISON,  // < > <= >= implements
 	PREC_SHIFT,       // << >> >>>
 	PREC_TERM,        // + -
-	PREC_FACTOR,      // * /
+	PREC_FACTOR,      // * / %
 	PREC_RANGE,       // x..y
 	PREC_UNARY,       // ! - ~ typeof ++x --x
 	PREC_POSTFIX,     // x++ x--
@@ -297,6 +297,7 @@ static bool isAssignment(Parser* parser) {
 		case TOKEN_IN_MINUS:
 		case TOKEN_IN_SLASH:
 		case TOKEN_IN_STAR:
+		case TOKEN_IN_PERCENT:
 		case TOKEN_IN_ASH:
 		case TOKEN_IN_RSH:
 		case TOKEN_IN_LSH:
@@ -317,6 +318,7 @@ static void inplaceOperator(Parser* parser, Compiler* compiler, TokenType type) 
 		case TOKEN_IN_MINUS: emitByte(parser, compiler, OP_SUB); break;
 		case TOKEN_IN_SLASH: emitByte(parser, compiler, OP_DIV); break;
 		case TOKEN_IN_STAR: emitByte(parser, compiler, OP_MUL); break;
+		case TOKEN_IN_PERCENT: emitByte(parser, compiler, OP_MOD); break;
 		case TOKEN_IN_ASH: emitByte(parser, compiler, OP_ASH); break;
 		case TOKEN_IN_RSH: emitByte(parser, compiler, OP_RSH); break;
 		case TOKEN_IN_LSH: emitByte(parser, compiler, OP_LSH); break;
@@ -386,6 +388,7 @@ static void binary(Parser* parser, Compiler* compiler, bool canAssign, bool canD
 		case TOKEN_MINUS:         emitByte(parser, compiler, OP_SUB); break;
 		case TOKEN_STAR:          emitByte(parser, compiler, OP_MUL); break;
 		case TOKEN_SLASH:         emitByte(parser, compiler, OP_DIV); break;
+		case TOKEN_PERCENT:       emitByte(parser, compiler, OP_MOD); break;
 		case TOKEN_BANG_EQUAL:    emitByte(parser, compiler, OP_EQUAL); emitByte(parser, compiler, OP_NOT); break;
 		case TOKEN_EQUAL_EQUAL:   emitByte(parser, compiler, OP_EQUAL); break;
 		case TOKEN_GREATER:       emitByte(parser, compiler, OP_GREATER); break;
@@ -2066,6 +2069,7 @@ ParseRule rules[] = {
   [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE},
   [TOKEN_SLASH] = {NULL, binary, PREC_FACTOR},
   [TOKEN_STAR] = {NULL, binary, PREC_FACTOR},
+  [TOKEN_PERCENT] = {NULL, binary, PREC_FACTOR},
   [TOKEN_BANG] = {unary, NULL, PREC_NONE},
   [TOKEN_BANG_EQUAL] = {NULL, binary, PREC_EQUALITY},
   [TOKEN_EQUAL] = {NULL, NULL, PREC_NONE},
@@ -2092,6 +2096,7 @@ ParseRule rules[] = {
   [TOKEN_IN_MINUS] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_STAR] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_SLASH] = {NULL, NULL, PREC_NONE},
+  [TOKEN_IN_PERCENT] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_LSH] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_RSH] = {NULL, NULL, PREC_NONE},
   [TOKEN_IN_ASH] = {NULL, NULL, PREC_NONE},
