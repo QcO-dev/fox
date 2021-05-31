@@ -102,6 +102,7 @@ size_t disassembleInstruction(VM* vm, Chunk* chunk, size_t offset) {
 		case OP_SUB: return simpleInstruction("SUB", offset);
 		case OP_DIV: return simpleInstruction("DIV", offset);
 		case OP_MUL: return simpleInstruction("MUL", offset);
+		case OP_MOD: return simpleInstruction("MOD", offset);
 		case OP_NULL: return simpleInstruction("NULL", offset);
 		case OP_TRUE: return simpleInstruction("TRUE", offset);
 		case OP_FALSE: return simpleInstruction("FALSE", offset);

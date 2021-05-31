@@ -279,6 +279,7 @@ Token scanToken(Scanner* scanner) {
 		case '~': return makeToken(scanner, TOKEN_BIT_NOT);
 		case '^': return makeToken(scanner, inplace(scanner, TOKEN_XOR, TOKEN_IN_XOR));
 		case '?': return makeToken(scanner, TOKEN_QUESTION);
+		case '%': return makeToken(scanner, inplace(scanner, TOKEN_PERCENT, TOKEN_IN_PERCENT));
 
 		case '+': return match(scanner, '+') ? 
 			makeToken(scanner, TOKEN_INCREMENT) : 

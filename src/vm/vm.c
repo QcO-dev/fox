@@ -121,7 +121,7 @@ void runtimeError(VM* vm, const char* format, ...) {
 	size_t count = 0;
 	bool repeating = false;
 
-	for (size_t i = vm->frameCount - 1; i >= 0; i--) {
+	for (int i = (int)vm->frameCount - 1; i >= 0; i--) {
 		CallFrame* frame = &vm->frames[i];
 		ObjFunction* function = frame->closure->function;
 		// -1 because the IP is sitting on the next instruction to be executed.
@@ -842,6 +842,28 @@ InterpreterResult execute(VM* vm, Chunk* chunk) {
 
 			case OP_MUL: {
 				BINARY_OP(vm, NUMBER_VAL, *);
+				break;
+			}
+
+			case OP_MOD: {
+				if (IS_INSTANCE(peek(vm, 1))) {
+					if (!invoke(vm, copyString(vm, "%", 1), 1)) {
+						return STATUS_RUNTIME_ERR;
+					}
+					vm->frame = &vm->frames[vm->frameCount - 1];
+					break;
+				}
+
+				if (!IS_NUMBER(peek(vm, 0)) || !IS_NUMBER(peek(vm, 1))) {
+					pop(vm);
+					pop(vm);
+					if (!throwException(vm, "InvalidOperationException", "Operands must be a numbers.")) return STATUS_RUNTIME_ERR;
+					break;
+				}
+
+				double b = AS_NUMBER(pop(vm));
+				double a = AS_NUMBER(pop(vm));
+				push(vm, NUMBER_VAL(fmod(a, b))); 
 				break;
 			}
 
